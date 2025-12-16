@@ -74,8 +74,10 @@ class SupabaseManager {
           await this.loadProfile();
         } else {
           console.log('📧 Email pendiente de confirmación');
-          // Mostrar mensaje al usuario
-          this.showEmailConfirmationWarning();
+          // Mostrar notificación si hay app
+          if (window.app && window.app.showToast) {
+            window.app.showToast('Por favor confirma tu email', 'warning');
+          }
         }
         
         return session;
@@ -88,60 +90,29 @@ class SupabaseManager {
     }
   }
 
-  showEmailConfirmationWarning() {
-    // Esta función será llamada desde la interfaz
-    if (window.app && window.app.showToast) {
-      window.app.showToast('Por favor confirma tu email para acceder a todas las funciones', 'warning');
-    }
-  }
-
   async loadProfile() {
     if (!this.user) return null;
     
     try {
-      // Primero intentar desde Supabase
-      const { data, error } = await this.supabase
-        .from('usuarios')
-        .select('*')
-        .eq('auth_id', this.user.id)
-        .maybeSingle();
-      
-      if (error) {
-        console.warn('Error cargando perfil desde Supabase:', error.message);
+      // Primero intentar desde local
+      const localProfile = await this.getLocalProfile();
+      if (localProfile) {
+        this.profile = localProfile;
         
-        // Si es error 406 (Not Acceptable) u otro error, usar datos locales
-        if (error.code === '406' || error.code === 'PGRST116' || error.code === 'PGRST204') {
-          console.log('📱 Usando datos locales para perfil');
-          return await this.getLocalProfile();
+        // Intentar sincronizar con Supabase si estamos online
+        if (this.isOnline) {
+          await this.syncProfileToSupabase(localProfile);
         }
-        throw error;
+        
+        return localProfile;
       }
       
-      if (data) {
-        this.profile = data;
-        
-        // Sincronizar con local
-        await localDB.update('usuarios', {
-          ...data,
-          fecha_actualizacion: new Date().toISOString()
-        }).catch(() => {
-          // Si falla, intentar agregar
-          localDB.add('usuarios', {
-            ...data,
-            fecha_creacion: new Date().toISOString(),
-            fecha_actualizacion: new Date().toISOString()
-          });
-        });
-        
-        return data;
-      }
-      
-      // Si no hay datos en Supabase, crear perfil básico
+      // Si no hay perfil local, crear uno básico
       return await this.createInitialProfile();
       
     } catch (error) {
       console.error('Error crítico cargando perfil:', error);
-      return await this.getLocalProfile();
+      return await this.createEmergencyProfile();
     }
   }
 
@@ -149,50 +120,23 @@ class SupabaseManager {
     if (!this.user) return null;
     
     try {
-      const localProfile = await localDB.getByIndex('usuarios', 'email', this.user.email);
-      if (localProfile) {
-        this.profile = localProfile;
-        return localProfile;
+      // Buscar por auth_id primero
+      const users = await localDB.getAllByIndex('usuarios', 'auth_id', this.user.id);
+      if (users && users.length > 0) {
+        return users[0];
       }
       
-      // Crear perfil local básico
-      const basicProfile = {
-        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        auth_id: this.user.id,
-        nombre: this.user.user_metadata?.nombre || 'Usuario',
-        nombre_usuario: this.user.user_metadata?.nombre_usuario || this.user.email.split('@')[0],
-        email: this.user.email,
-        config_moneda: 'USD',
-        config_tema: 'auto',
-        fecha_creacion: new Date().toISOString(),
-        fecha_actualizacion: new Date().toISOString()
-      };
+      // Buscar por email como fallback
+      const usersByEmail = await localDB.getAll('usuarios');
+      const userByEmail = usersByEmail.find(u => u.email === this.user.email);
+      if (userByEmail) {
+        return userByEmail;
+      }
       
-      await localDB.add('usuarios', basicProfile);
-      this.profile = basicProfile;
-      
-      // Agregar a cola de sincronización
-      await localDB.addToSyncQueue('INSERT', 'usuarios', basicProfile.id, basicProfile);
-      
-      return basicProfile;
+      return null;
     } catch (error) {
-      console.error('Error obteniendo perfil local:', error);
-      
-      // Crear perfil de emergencia
-      const emergencyProfile = {
-        id: `emergency_${Date.now()}`,
-        auth_id: this.user.id,
-        nombre: 'Usuario',
-        nombre_usuario: 'usuario',
-        email: this.user.email,
-        config_moneda: 'USD',
-        config_tema: 'auto',
-        fecha_creacion: new Date().toISOString(),
-        fecha_actualizacion: new Date().toISOString()
-      };
-      
-      this.profile = emergencyProfile;
-      return emergencyProfile;
+      console.warn('Error obteniendo perfil local:', error);
+      return null;
     }
   }
 
@@ -206,47 +150,131 @@ class SupabaseManager {
       email: this.user.email,
       config_moneda: 'USD',
       config_tema: 'auto',
-      fecha_creacion: new Date().toISOString()
+      fecha_creacion: new Date().toISOString(),
+      fecha_actualizacion: new Date().toISOString()
+    };
+
+    // Generar UUID para Supabase (debe ser formato UUID válido)
+    const supabaseId = this.generateUUID();
+    
+    const localProfile = {
+      ...profileData,
+      id: supabaseId, // Usar el mismo ID para local y remoto
+      local_id: `local_${Date.now()}`, // ID auxiliar local
     };
 
     try {
-      const { data, error } = await this.supabase
-        .from('usuarios')
-        .insert([profileData])
-        .select()
-        .single();
-
-      if (error) {
-        console.warn('Error creando perfil en Supabase:', error);
-        
-        // Guardar localmente
-        const localProfile = {
-          ...profileData,
-          id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          fecha_actualizacion: new Date().toISOString()
-        };
-        
-        await localDB.add('usuarios', localProfile);
-        this.profile = localProfile;
-        
+      // Guardar localmente primero
+      await localDB.add('usuarios', localProfile);
+      this.profile = localProfile;
+      
+      // Intentar guardar en Supabase si estamos online
+      if (this.isOnline && this.user.email_confirmed_at) {
+        await this.syncProfileToSupabase(localProfile);
+      } else {
         // Agregar a cola de sincronización
         await localDB.addToSyncQueue('INSERT', 'usuarios', localProfile.id, localProfile);
-        
-        return localProfile;
       }
-
-      this.profile = data;
       
-      // Guardar localmente también
-      await localDB.add('usuarios', {
-        ...data,
-        fecha_actualizacion: new Date().toISOString()
-      });
-      
-      return data;
+      return localProfile;
     } catch (error) {
       console.error('Error creando perfil inicial:', error);
-      return await this.getLocalProfile();
+      return await this.createEmergencyProfile();
+    }
+  }
+
+  async createEmergencyProfile() {
+    if (!this.user) return null;
+    
+    const emergencyProfile = {
+      id: `emergency_${Date.now()}`,
+      auth_id: this.user.id,
+      nombre: 'Usuario',
+      nombre_usuario: 'usuario',
+      email: this.user.email,
+      config_moneda: 'USD',
+      config_tema: 'auto',
+      fecha_creacion: new Date().toISOString(),
+      fecha_actualizacion: new Date().toISOString()
+    };
+    
+    try {
+      await localDB.add('usuarios', emergencyProfile);
+      this.profile = emergencyProfile;
+      return emergencyProfile;
+    } catch (error) {
+      console.error('Error creando perfil de emergencia:', error);
+      return emergencyProfile;
+    }
+  }
+
+  async syncProfileToSupabase(profile) {
+    if (!this.isOnline || !this.user?.email_confirmed_at) {
+      return false;
+    }
+
+    try {
+      // Preparar datos para Supabase (remover campos locales)
+      const supabaseData = {
+        auth_id: profile.auth_id,
+        nombre: profile.nombre,
+        nombre_usuario: profile.nombre_usuario,
+        email: profile.email,
+        config_moneda: profile.config_moneda,
+        config_tema: profile.config_tema,
+        fecha_creacion: profile.fecha_creacion,
+        fecha_actualizacion: profile.fecha_actualizacion
+      };
+
+      // Verificar si ya existe en Supabase
+      const { data: existingUser, error: checkError } = await this.supabase
+        .from('usuarios')
+        .select('id')
+        .eq('auth_id', profile.auth_id)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.warn('Error verificando usuario en Supabase:', checkError);
+      }
+
+      let result;
+      if (existingUser) {
+        // Actualizar usuario existente
+        result = await this.supabase
+          .from('usuarios')
+          .update(supabaseData)
+          .eq('auth_id', profile.auth_id);
+      } else {
+        // Insertar nuevo usuario
+        result = await this.supabase
+          .from('usuarios')
+          .insert([{ ...supabaseData, id: profile.id }]);
+      }
+
+      if (result.error) {
+        if (result.error.code === '23505') { // Violación de unicidad
+          console.warn('Usuario ya existe en Supabase, actualizando...');
+          // Intentar actualizar con ID diferente
+          supabaseData.id = this.generateUUID();
+          const retryResult = await this.supabase
+            .from('usuarios')
+            .insert([supabaseData]);
+          
+          if (retryResult.error) {
+            throw retryResult.error;
+          }
+        } else {
+          throw result.error;
+        }
+      }
+
+      console.log('✅ Perfil sincronizado con Supabase');
+      return true;
+    } catch (error) {
+      console.warn('Error sincronizando perfil con Supabase:', error);
+      // Agregar a cola de sincronización
+      await localDB.addToSyncQueue('INSERT', 'usuarios', profile.id, profile);
+      return false;
     }
   }
 
@@ -254,32 +282,18 @@ class SupabaseManager {
     console.log('📝 Registrando usuario:', email);
     
     try {
+      // URL de redirección para GitHub Pages
+      const redirectUrl = `${window.location.origin}/commission-manager/#login`;
+      
       const { data, error } = await this.supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             nombre: userData.nombre,
-            nombre_usuario: userData.nombre_usuario,
-            email_verified: false
+            nombre_usuario: userData.nombre_usuario
           },
-          emailRedirectTo: `${window.location.origin}#login`,
-          emailConfirmOptions: {
-            subject: 'Confirma tu cuenta - Commission Manager Pro',
-            message: `
-Hola ${userData.nombre},
-
-Gracias por registrarte en Commission Manager Pro. 
-Por favor confirma tu email haciendo clic en el siguiente enlace:
-
-##CONFIRMATION_LINK##
-
-Si no solicitaste esta cuenta, puedes ignorar este email.
-
-Saludos,
-El equipo de Commission Manager Pro
-`
-          }
+          emailRedirectTo: redirectUrl
         }
       });
 
@@ -288,20 +302,18 @@ El equipo de Commission Manager Pro
         return {
           success: false,
           error: this.translateAuthError(error.message),
-          code: error.code,
-          message: this.translateAuthError(error.message)
+          code: error.code
         };
       }
 
+      console.log('✅ Usuario registrado:', data.user?.email);
+      
       if (data.user) {
-        console.log('✅ Usuario registrado:', data.user.email);
-        
-        // Guardar usuario temporalmente
         this.user = data.user;
         
-        // Crear perfil local temporal
+        // Crear perfil local temporal (sin sincronizar aún)
         const tempProfile = {
-          id: `temp_${Date.now()}`,
+          id: this.generateUUID(),
           auth_id: data.user.id,
           nombre: userData.nombre,
           nombre_usuario: userData.nombre_usuario,
@@ -320,7 +332,7 @@ El equipo de Commission Manager Pro
           success: true,
           user: data.user,
           needsEmailVerification: true,
-          message: 'Registro exitoso. Hemos enviado un email de confirmación a tu dirección. Por favor revisa tu bandeja de entrada y confirma tu email antes de iniciar sesión.'
+          message: 'Registro exitoso. Revisa tu email para confirmar tu cuenta.'
         };
       }
 
@@ -356,23 +368,12 @@ El equipo de Commission Manager Pro
         };
       }
 
-      // Verificar si el email está confirmado
-      if (!data.user.email_confirmed_at) {
-        console.log('📧 Email no confirmado');
-        return {
-          success: false,
-          error: 'Por favor confirma tu email antes de iniciar sesión. Revisa tu bandeja de entrada.',
-          needsEmailConfirmation: true,
-          user: data.user
-        };
-      }
-
       this.user = data.user;
       this.session = data.session;
       
       console.log('✅ Sesión iniciada:', data.user.email);
       
-      // Cargar perfil
+      // Cargar perfil (o crear si no existe)
       await this.loadProfile();
       
       return {
@@ -382,31 +383,6 @@ El equipo de Commission Manager Pro
       };
     } catch (error) {
       console.error('Error en login:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async resendConfirmationEmail(email) {
-    try {
-      const { error } = await this.supabase.auth.resend({
-        type: 'signup',
-        email: email,
-        options: {
-          emailRedirectTo: `${window.location.origin}#login`
-        }
-      });
-
-      if (error) throw error;
-
-      return { 
-        success: true,
-        message: 'Se ha reenviado el email de confirmación. Por favor revisa tu bandeja de entrada.'
-      };
-    } catch (error) {
-      console.error('Error reenviando email de confirmación:', error);
       return {
         success: false,
         error: error.message
@@ -444,199 +420,60 @@ El equipo de Commission Manager Pro
     }
   }
 
-  async resetPassword(email) {
-    try {
-      const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (error) throw error;
-
-      return { 
-        success: true,
-        message: 'Se ha enviado un email con las instrucciones para restablecer tu contraseña.'
-      };
-    } catch (error) {
-      console.error('Error en recuperación:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async updatePassword(newPassword) {
-    try {
-      const { error } = await this.supabase.auth.updateUser({
-        password: newPassword
-      });
-
-      if (error) throw error;
-
-      return { 
-        success: true,
-        message: 'Contraseña actualizada correctamente.'
-      };
-    } catch (error) {
-      console.error('Error al cambiar contraseña:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async updateProfile(profileData) {
-    if (!this.user || !this.profile) {
-      return {
-        success: false,
-        error: 'Usuario no autenticado'
-      };
-    }
-
-    try {
-      const updatedData = {
-        ...profileData,
-        fecha_actualizacion: new Date().toISOString()
-      };
-
-      // Actualizar localmente primero
-      await localDB.update('usuarios', {
-        ...this.profile,
-        ...updatedData
-      });
-
-      // Actualizar en Supabase si hay conexión
-      if (this.isOnline) {
-        const { data, error } = await this.supabase
-          .from('usuarios')
-          .update(updatedData)
-          .eq('auth_id', this.user.id)
-          .select()
-          .single();
-
-        if (error) {
-          console.warn('Error actualizando perfil en Supabase:', error);
-          
-          // Agregar a cola de sincronización
-          await localDB.addToSyncQueue('UPDATE', 'usuarios', this.profile.id, updatedData);
-        } else {
-          this.profile = data;
-        }
-      } else {
-        // Si está offline, agregar a cola de sincronización
-        await localDB.addToSyncQueue('UPDATE', 'usuarios', this.profile.id, updatedData);
-      }
-
-      // Actualizar perfil local
-      this.profile = { ...this.profile, ...updatedData };
-
-      return {
-        success: true,
-        profile: this.profile,
-        message: 'Perfil actualizado'
-      };
-    } catch (error) {
-      console.error('Error al actualizar perfil:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async deleteAccount() {
-    if (!this.user) {
-      return {
-        success: false,
-        error: 'Usuario no autenticado'
-      };
-    }
-
-    try {
-      // 1. Eliminar datos locales
-      await localDB.delete('usuarios', this.profile?.id || this.user.id);
-      
-      // 2. Eliminar empresas y datos relacionados localmente
-      const empresas = await localDB.getEmpresasByUsuario(this.profile?.id || this.user.id);
-      for (const empresa of empresas) {
-        await localDB.delete('empresas', empresa.id);
-      }
-      
-      // 3. Cerrar sesión
-      await this.logout();
-      
-      // 4. Intentar eliminar de Supabase (si hay conexión)
-      if (this.isOnline) {
-        const { error } = await this.supabase
-          .from('usuarios')
-          .delete()
-          .eq('auth_id', this.user.id);
-          
-        if (error) {
-          console.warn('No se pudo eliminar cuenta de Supabase:', error);
-        }
-      }
-
-      return {
-        success: true,
-        message: 'Cuenta eliminada correctamente'
-      };
-    } catch (error) {
-      console.error('Error al eliminar cuenta:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async getUserProfile() {
-    return this.profile;
-  }
-
   async getEmpresas() {
     if (!this.profile) return [];
     
     try {
       let empresas = [];
       
-      // Intentar obtener de Supabase si hay conexión
-      if (this.isOnline) {
-        const { data, error } = await this.supabase
-          .from('empresas')
-          .select('*')
-          .eq('usuario_id', this.profile.id)
-          .order('fecha_creacion', { ascending: false });
+      // Intentar obtener de Supabase si hay conexión y email confirmado
+      if (this.isOnline && this.user?.email_confirmed_at) {
+        try {
+          // IMPORTANTE: Usar el ID correcto (el que está en Supabase)
+          const { data, error } = await this.supabase
+            .from('empresas')
+            .select('*')
+            .eq('usuario_id', this.profile.id) // Usar el ID del perfil
+            .order('fecha_creacion', { ascending: false });
 
-        if (!error && data) {
-          empresas = data;
-          
-          // Sincronizar con local
-          for (const empresa of empresas) {
-            await localDB.update('empresas', {
-              ...empresa,
-              fecha_actualizacion: new Date().toISOString()
-            }).catch(() => {
-              localDB.add('empresas', {
+          if (!error && data) {
+            empresas = data;
+            
+            // Sincronizar con local
+            for (const empresa of empresas) {
+              await localDB.update('empresas', {
                 ...empresa,
-                fecha_creacion: new Date().toISOString(),
                 fecha_actualizacion: new Date().toISOString()
+              }).catch(() => {
+                localDB.add('empresas', {
+                  ...empresa,
+                  fecha_creacion: new Date().toISOString(),
+                  fecha_actualizacion: new Date().toISOString()
+                });
               });
-            });
+            }
           }
+        } catch (supabaseError) {
+          console.warn('Error obteniendo empresas de Supabase:', supabaseError);
         }
       }
       
-      // Si no hay datos online o hay error, obtener locales
-      if (empresas.length === 0) {
-        empresas = await localDB.getEmpresasByUsuario(this.profile.id);
-      }
+      // Obtener locales
+      const empresasLocales = await localDB.getEmpresasByUsuario(this.profile.id);
       
-      return empresas;
+      // Combinar y eliminar duplicados
+      const empresasMap = new Map();
+      
+      // Agregar locales primero
+      empresasLocales.forEach(emp => empresasMap.set(emp.id, emp));
+      
+      // Agregar/actualizar con remotas
+      empresas.forEach(emp => empresasMap.set(emp.id, emp));
+      
+      return Array.from(empresasMap.values());
     } catch (error) {
       console.error('Error obteniendo empresas:', error);
-      return await localDB.getEmpresasByUsuario(this.profile.id);
+      return await localDB.getEmpresasByUsuario(this.profile.id).catch(() => []);
     }
   }
 
@@ -649,11 +486,11 @@ El equipo de Commission Manager Pro
     }
 
     try {
-      const empresaId = `emp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const empresaId = this.generateUUID();
       
       const empresaCompleta = {
         id: empresaId,
-        usuario_id: this.profile.id,
+        usuario_id: this.profile.id, // Usar el ID del perfil (UUID)
         ...empresaData,
         estado: empresaData.estado || 'activa',
         comision_default: empresaData.comision_default || 1.00,
@@ -666,6 +503,11 @@ El equipo de Commission Manager Pro
       
       // Agregar a cola de sincronización
       await localDB.addToSyncQueue('INSERT', 'empresas', empresaId, empresaCompleta);
+
+      // Intentar sincronizar inmediatamente si está online
+      if (this.isOnline && this.user?.email_confirmed_at) {
+        setTimeout(() => this.syncData(), 1000);
+      }
 
       return {
         success: true,
@@ -769,47 +611,7 @@ El equipo de Commission Manager Pro
     }
   }
 
-  async getContratosByEmpresa(empresaId) {
-    try {
-      let contratos = [];
-      
-      if (this.isOnline) {
-        const { data, error } = await this.supabase
-          .from('contratos')
-          .select('*')
-          .eq('empresa_id', empresaId)
-          .order('fecha_creacion', { ascending: false });
-
-        if (!error && data) {
-          contratos = data;
-          
-          // Sincronizar con local
-          for (const contrato of contratos) {
-            await localDB.update('contratos', {
-              ...contrato,
-              fecha_actualizacion: new Date().toISOString()
-            }).catch(() => {
-              localDB.add('contratos', {
-                ...contrato,
-                fecha_creacion: new Date().toISOString(),
-                fecha_actualizacion: new Date().toISOString()
-              });
-            });
-          }
-        }
-      }
-      
-      if (contratos.length === 0) {
-        contratos = await localDB.getContratosByEmpresa(empresaId);
-      }
-      
-      return contratos;
-    } catch (error) {
-      console.error('Error obteniendo contratos:', error);
-      return await localDB.getContratosByEmpresa(empresaId);
-    }
-  }
-
+  // NUEVAS FUNCIONALIDADES - CONTRATOS
   async createContrato(contratoData) {
     if (!this.profile) {
       return {
@@ -819,7 +621,7 @@ El equipo de Commission Manager Pro
     }
 
     try {
-      const contratoId = `con_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const contratoId = this.generateUUID();
       
       const contratoCompleto = {
         id: contratoId,
@@ -828,6 +630,14 @@ El equipo de Commission Manager Pro
         fecha_creacion: new Date().toISOString(),
         fecha_actualizacion: new Date().toISOString()
       };
+
+      // Validar campos requeridos
+      if (!contratoCompleto.empresa_id || !contratoCompleto.numero_contrato || !contratoCompleto.nombre || !contratoCompleto.monto_base) {
+        return {
+          success: false,
+          error: 'Faltan campos requeridos: empresa, número de contrato, nombre y monto base'
+        };
+      }
 
       // Guardar localmente
       await localDB.add('contratos', contratoCompleto);
@@ -849,6 +659,142 @@ El equipo de Commission Manager Pro
     }
   }
 
+  async getContratosByEmpresa(empresaId) {
+    try {
+      let contratos = [];
+      
+      // Obtener locales
+      contratos = await localDB.getContratosByEmpresa(empresaId);
+      
+      return contratos;
+    } catch (error) {
+      console.error('Error obteniendo contratos:', error);
+      return [];
+    }
+  }
+
+  // NUEVAS FUNCIONALIDADES - CERTIFICACIONES
+  async createCertificacion(certificacionData) {
+    if (!this.profile) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
+
+    try {
+      const certificacionId = this.generateUUID();
+      
+      // Calcular comisión automáticamente
+      const porcentaje = certificacionData.porcentaje_comision || 1.00;
+      const comisionCalculada = (certificacionData.monto_certificado * porcentaje) / 100;
+      
+      const certificacionCompleta = {
+        id: certificacionId,
+        ...certificacionData,
+        porcentaje_comision: porcentaje,
+        comision_calculada: comisionCalculada,
+        comision_editada: certificacionData.comision_editada || comisionCalculada,
+        pagado: certificacionData.pagado || false,
+        fecha_creacion: new Date().toISOString(),
+        fecha_actualizacion: new Date().toISOString()
+      };
+
+      // Validar campos requeridos
+      if (!certificacionCompleta.contrato_id || !certificacionCompleta.mes || !certificacionCompleta.monto_certificado) {
+        return {
+          success: false,
+          error: 'Faltan campos requeridos: contrato, mes y monto certificado'
+        };
+      }
+
+      // Guardar localmente
+      await localDB.add('certificaciones', certificacionCompleta);
+      
+      // Agregar a cola de sincronización
+      await localDB.addToSyncQueue('INSERT', 'certificaciones', certificacionId, certificacionCompleta);
+
+      return {
+        success: true,
+        certificacion: certificacionCompleta,
+        message: 'Certificación creada correctamente'
+      };
+    } catch (error) {
+      console.error('Error creando certificación:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async getCertificacionesByContrato(contratoId) {
+    try {
+      const certificaciones = await localDB.getCertificacionesByContrato(contratoId);
+      return certificaciones;
+    } catch (error) {
+      console.error('Error obteniendo certificaciones:', error);
+      return [];
+    }
+  }
+
+  // NUEVAS FUNCIONALIDADES - PAGOS
+  async createPago(pagoData) {
+    if (!this.profile) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
+
+    try {
+      const pagoId = this.generateUUID();
+      
+      const pagoCompleto = {
+        id: pagoId,
+        ...pagoData,
+        fecha_creacion: new Date().toISOString()
+      };
+
+      // Validar campos requeridos
+      if (!pagoCompleto.empresa_id || !pagoCompleto.tipo || !pagoCompleto.monto_total || !pagoCompleto.fecha_pago) {
+        return {
+          success: false,
+          error: 'Faltan campos requeridos: empresa, tipo, monto total y fecha de pago'
+        };
+      }
+
+      // Guardar localmente
+      await localDB.add('pagos', pagoCompleto);
+      
+      // Agregar a cola de sincronización
+      await localDB.addToSyncQueue('INSERT', 'pagos', pagoId, pagoCompleto);
+
+      return {
+        success: true,
+        pago: pagoCompleto,
+        message: 'Pago registrado correctamente'
+      };
+    } catch (error) {
+      console.error('Error creando pago:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async getPagosByEmpresa(empresaId) {
+    try {
+      const pagos = await localDB.getPagosByEmpresa(empresaId);
+      return pagos;
+    } catch (error) {
+      console.error('Error obteniendo pagos:', error);
+      return [];
+    }
+  }
+
+  // SISTEMA DE SINCRONIZACIÓN MEJORADO
   async syncData() {
     if (!this.isOnline) {
       return {
@@ -857,10 +803,16 @@ El equipo de Commission Manager Pro
       };
     }
 
+    if (!this.user?.email_confirmed_at) {
+      return {
+        success: false,
+        error: 'Email no confirmado. Confirma tu email para sincronizar.'
+      };
+    }
+
     console.log('🔄 Iniciando sincronización de datos...');
     
     try {
-      // 1. Obtener cambios pendientes locales
       const pendingItems = await localDB.getPendingSyncItems();
       
       if (pendingItems.length === 0) {
@@ -874,10 +826,8 @@ El equipo de Commission Manager Pro
       let successCount = 0;
       let errorCount = 0;
       
-      // 2. Procesar cada cambio
       for (const item of pendingItems) {
         try {
-          // Marcar como procesando
           await localDB.update('sync_queue', {
             ...item,
             estado: 'procesando',
@@ -885,22 +835,22 @@ El equipo de Commission Manager Pro
           });
 
           let result;
+          const dataForSupabase = { ...item.data };
+          
+          // Remover campos locales antes de enviar a Supabase
+          delete dataForSupabase.local_id;
           
           switch (item.action) {
             case 'INSERT':
-              // Remover el id local para que Supabase genere uno nuevo
-              const insertData = { ...item.data };
-              delete insertData.id; // Supabase generará un UUID
-              
               result = await this.supabase
                 .from(item.table)
-                .insert([insertData]);
+                .insert([dataForSupabase]);
               break;
               
             case 'UPDATE':
               result = await this.supabase
                 .from(item.table)
-                .update(item.data)
+                .update(dataForSupabase)
                 .eq('id', item.record_id);
               break;
               
@@ -913,17 +863,25 @@ El equipo de Commission Manager Pro
           }
 
           if (result.error) {
-            throw new Error(result.error.message);
+            // Si es error de duplicado en usuarios, intentar actualizar
+            if (result.error.code === '23505' && item.table === 'usuarios') {
+              const updateResult = await this.supabase
+                .from(item.table)
+                .update(dataForSupabase)
+                .eq('auth_id', dataForSupabase.auth_id);
+              
+              if (updateResult.error) throw updateResult.error;
+            } else {
+              throw result.error;
+            }
           }
 
-          // Marcar como completado
           await localDB.markSyncItemProcessed(item.id, true);
           successCount++;
           
         } catch (error) {
-          console.error(`Error sincronizando ${item.table} ${item.record_id}:`, error);
+          console.error(`Error sincronizando ${item.table}:`, error);
           
-          // Marcar como error si tiene muchos intentos
           if (item.intentos >= 3) {
             await localDB.markSyncItemProcessed(item.id, false, error.message);
           } else {
@@ -950,6 +908,29 @@ El equipo de Commission Manager Pro
         error: error.message
       };
     }
+  }
+
+  // UTILIDADES
+  generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  translateAuthError(errorMessage) {
+    const translations = {
+      'Invalid login credentials': 'Credenciales inválidas',
+      'Email not confirmed': 'Email no confirmado. Por favor verifica tu email.',
+      'User already registered': 'Usuario ya registrado',
+      'Password should be at least 6 characters': 'La contraseña debe tener al menos 6 caracteres',
+      'Invalid email': 'Email inválido',
+      'User not found': 'Usuario no encontrado',
+      'For security purposes, you can only request this after 60 seconds': 'Por seguridad, debes esperar 60 segundos antes de intentar nuevamente'
+    };
+    
+    return translations[errorMessage] || errorMessage;
   }
 
   async checkConnection() {
@@ -992,35 +973,21 @@ El equipo de Commission Manager Pro
     console.log('🌐 Conexión restablecida');
     this.isOnline = true;
     
-    // Intentar sincronizar automáticamente
-    setTimeout(async () => {
-      try {
-        await this.syncData();
-      } catch (error) {
-        console.error('Error en sincronización automática:', error);
-      }
-    }, 2000);
+    // Sincronizar si el email está confirmado
+    if (this.user?.email_confirmed_at) {
+      setTimeout(async () => {
+        try {
+          await this.syncData();
+        } catch (error) {
+          console.error('Error en sincronización automática:', error);
+        }
+      }, 2000);
+    }
   }
 
   async handleOffline() {
     console.log('📴 Sin conexión');
     this.isOnline = false;
-  }
-
-  translateAuthError(errorMessage) {
-    const translations = {
-      'Invalid login credentials': 'Credenciales inválidas',
-      'Email not confirmed': 'Email no confirmado. Por favor verifica tu email antes de iniciar sesión.',
-      'User already registered': 'Usuario ya registrado',
-      'Password should be at least 6 characters': 'La contraseña debe tener al menos 6 caracteres',
-      'Invalid email': 'Email inválido',
-      'User not found': 'Usuario no encontrado',
-      'Unable to validate email address: invalid format': 'Formato de email inválido',
-      'To signup, please provide your email': 'Por favor proporciona tu email para registrarte',
-      'Signup requires a valid password': 'Se requiere una contraseña válida para registrarse'
-    };
-    
-    return translations[errorMessage] || errorMessage;
   }
 
   // Métodos de utilidad
@@ -1040,38 +1007,39 @@ El equipo de Commission Manager Pro
     return this.session;
   }
 
-  // Subida de archivos (logos)
-  async uploadFile(bucket, file, path) {
-    if (!this.isOnline) {
+  async getUserProfile() {
+    return this.profile;
+  }
+
+  async updateProfile(profileData) {
+    if (!this.user || !this.profile) {
       return {
         success: false,
-        error: 'Sin conexión a internet'
+        error: 'Usuario no autenticado'
       };
     }
 
     try {
-      const { data, error } = await this.supabase.storage
-        .from(bucket)
-        .upload(path, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
+      const updatedData = {
+        ...this.profile,
+        ...profileData,
+        fecha_actualizacion: new Date().toISOString()
+      };
 
-      if (error) throw error;
-
-      // Obtener URL pública
-      const { data: { publicUrl } } = this.supabase.storage
-        .from(bucket)
-        .getPublicUrl(path);
+      // Actualizar localmente
+      await localDB.update('usuarios', updatedData);
+      this.profile = updatedData;
+      
+      // Agregar a cola de sincronización
+      await localDB.addToSyncQueue('UPDATE', 'usuarios', this.profile.id, updatedData);
 
       return {
         success: true,
-        path: data.path,
-        url: publicUrl,
-        message: 'Archivo subido correctamente'
+        profile: this.profile,
+        message: 'Perfil actualizado'
       };
     } catch (error) {
-      console.error('Error al subir archivo:', error);
+      console.error('Error al actualizar perfil:', error);
       return {
         success: false,
         error: error.message
@@ -1079,47 +1047,30 @@ El equipo de Commission Manager Pro
     }
   }
 
-  async deleteFile(bucket, path) {
-    if (!this.isOnline) {
-      return {
-        success: false,
-        error: 'Sin conexión a internet'
-      };
-    }
-
+  async resendConfirmationEmail(email) {
     try {
-      const { data, error } = await this.supabase.storage
-        .from(bucket)
-        .remove([path]);
+      const redirectUrl = `${window.location.origin}/commission-manager/#login`;
+      
+      const { error } = await this.supabase.auth.resend({
+        type: 'signup',
+        email: email,
+        options: {
+          emailRedirectTo: redirectUrl
+        }
+      });
 
       if (error) throw error;
 
       return { 
         success: true,
-        message: 'Archivo eliminado correctamente'
+        message: 'Se ha reenviado el email de confirmación'
       };
     } catch (error) {
-      console.error('Error al eliminar archivo:', error);
+      console.error('Error reenviando email:', error);
       return {
         success: false,
         error: error.message
       };
-    }
-  }
-
-  // Verificar estado de confirmación de email
-  async checkEmailConfirmation() {
-    if (!this.user) return false;
-    
-    try {
-      const { data, error } = await this.supabase.auth.getUser();
-      
-      if (error) throw error;
-      
-      return data.user.email_confirmed_at !== null;
-    } catch (error) {
-      console.error('Error verificando confirmación de email:', error);
-      return false;
     }
   }
 }
