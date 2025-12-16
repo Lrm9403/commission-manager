@@ -1,13 +1,12 @@
-// Configuración de IndexedDB para almacenamiento local
+// Base de datos local IndexedDB - Commission Manager Pro
 class LocalDatabase {
   constructor() {
     this.db = null;
     this.dbName = 'CommissionManagerDB';
-    this.dbVersion = 1;
+    this.dbVersion = 3; // Versión incrementada para forzar actualización
     this.initPromise = null;
   }
 
-  // Inicializar la base de datos
   async init() {
     if (this.initPromise) {
       return this.initPromise;
@@ -17,7 +16,7 @@ class LocalDatabase {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
       request.onerror = (event) => {
-        console.error('Error al abrir IndexedDB:', event.target.error);
+        console.error('❌ Error al abrir IndexedDB:', event.target.error);
         reject(event.target.error);
       };
 
@@ -31,43 +30,48 @@ class LocalDatabase {
         const db = event.target.result;
         console.log('🔄 Actualizando estructura de IndexedDB...');
 
-        // Crear store para usuarios
+        // Tabla de usuarios
         if (!db.objectStoreNames.contains('usuarios')) {
           const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
+          userStore.createIndex('auth_id', 'auth_id', { unique: true });
           userStore.createIndex('email', 'email', { unique: true });
-          userStore.createIndex('username', 'username', { unique: true });
+          userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: true });
         }
 
-        // Crear store para empresas
+        // Tabla de empresas
         if (!db.objectStoreNames.contains('empresas')) {
           const companyStore = db.createObjectStore('empresas', { keyPath: 'id' });
           companyStore.createIndex('usuario_id', 'usuario_id', { unique: false });
           companyStore.createIndex('nombre', 'nombre', { unique: false });
+          companyStore.createIndex('estado', 'estado', { unique: false });
         }
 
-        // Crear store para contratos
+        // Tabla de contratos
         if (!db.objectStoreNames.contains('contratos')) {
           const contractStore = db.createObjectStore('contratos', { keyPath: 'id' });
           contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
           contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: true });
           contractStore.createIndex('estado', 'estado', { unique: false });
+          contractStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
         }
 
-        // Crear store para suplementos
+        // Tabla de suplementos
         if (!db.objectStoreNames.contains('suplementos')) {
           const supplementStore = db.createObjectStore('suplementos', { keyPath: 'id' });
           supplementStore.createIndex('contrato_id', 'contrato_id', { unique: false });
+          supplementStore.createIndex('fecha_suplemento', 'fecha_suplemento', { unique: false });
         }
 
-        // Crear store para certificaciones
+        // Tabla de certificaciones
         if (!db.objectStoreNames.contains('certificaciones')) {
           const certificationStore = db.createObjectStore('certificaciones', { keyPath: 'id' });
           certificationStore.createIndex('contrato_id', 'contrato_id', { unique: false });
           certificationStore.createIndex('mes', 'mes', { unique: false });
           certificationStore.createIndex('contrato_mes', ['contrato_id', 'mes'], { unique: true });
+          certificationStore.createIndex('pagado', 'pagado', { unique: false });
         }
 
-        // Crear store para pagos
+        // Tabla de pagos
         if (!db.objectStoreNames.contains('pagos')) {
           const paymentStore = db.createObjectStore('pagos', { keyPath: 'id' });
           paymentStore.createIndex('empresa_id', 'empresa_id', { unique: false });
@@ -75,37 +79,50 @@ class LocalDatabase {
           paymentStore.createIndex('tipo', 'tipo', { unique: false });
         }
 
-        // Crear store para distribución de pagos
+        // Tabla de distribución de pagos
         if (!db.objectStoreNames.contains('pagos_distribucion')) {
           const distributionStore = db.createObjectStore('pagos_distribucion', { keyPath: 'id' });
           distributionStore.createIndex('pago_id', 'pago_id', { unique: false });
           distributionStore.createIndex('contrato_id', 'contrato_id', { unique: false });
         }
 
-        // Crear store para cola de sincronización
+        // ✅ TABLA DE SINCRONIZACIÓN CORREGIDA - SIN ÍNDICE CON BOOLEAN
         if (!db.objectStoreNames.contains('sync_queue')) {
           const syncStore = db.createObjectStore('sync_queue', { 
             keyPath: 'id',
             autoIncrement: true 
           });
-          syncStore.createIndex('procesado', 'procesado', { unique: false });
+          // Índice corregido: usar string en lugar de boolean
+          syncStore.createIndex('estado', 'estado', { unique: false });
           syncStore.createIndex('tabla', 'tabla', { unique: false });
           syncStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
         }
 
-        // Crear store para configuración
+        // Tabla de configuración
         if (!db.objectStoreNames.contains('configuracion')) {
           const configStore = db.createObjectStore('configuracion', { keyPath: 'key' });
         }
 
-        console.log('✅ Estructura de IndexedDB creada');
+        // Tabla de conflictos
+        if (!db.objectStoreNames.contains('conflictos')) {
+          const conflictStore = db.createObjectStore('conflictos', { keyPath: 'id' });
+          conflictStore.createIndex('resuelto', 'resuelto', { unique: false });
+        }
+
+        // Tabla de backups
+        if (!db.objectStoreNames.contains('backups')) {
+          const backupStore = db.createObjectStore('backups', { keyPath: 'id' });
+          backupStore.createIndex('fecha', 'fecha', { unique: false });
+        }
+
+        console.log('✅ Estructura de IndexedDB creada/actualizada');
       };
     });
 
     return this.initPromise;
   }
 
-  // Método genérico para agregar un registro
+  // Métodos CRUD genéricos
   async add(storeName, data) {
     await this.init();
     
@@ -114,18 +131,11 @@ class LocalDatabase {
       const store = transaction.objectStore(storeName);
       const request = store.add(data);
 
-      request.onsuccess = () => {
-        resolve(request.result);
-      };
-
-      request.onerror = (event) => {
-        console.error(`Error al agregar en ${storeName}:`, event.target.error);
-        reject(event.target.error);
-      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = (event) => reject(event.target.error);
     });
   }
 
-  // Método genérico para obtener un registro por ID
   async get(storeName, id) {
     await this.init();
     
@@ -134,18 +144,11 @@ class LocalDatabase {
       const store = transaction.objectStore(storeName);
       const request = store.get(id);
 
-      request.onsuccess = () => {
-        resolve(request.result);
-      };
-
-      request.onerror = (event) => {
-        console.error(`Error al obtener de ${storeName}:`, event.target.error);
-        reject(event.target.error);
-      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = (event) => reject(event.target.error);
     });
   }
 
-  // Método genérico para obtener todos los registros
   async getAll(storeName, indexName = null, query = null) {
     await this.init();
     
@@ -154,25 +157,22 @@ class LocalDatabase {
       const store = transaction.objectStore(storeName);
       
       let request;
-      if (indexName) {
+      if (indexName && query !== undefined) {
         const index = store.index(indexName);
-        request = index.getAll(query);
+        const keyRange = IDBKeyRange.only(query);
+        request = index.getAll(keyRange);
+      } else if (indexName) {
+        const index = store.index(indexName);
+        request = index.getAll();
       } else {
         request = store.getAll();
       }
 
-      request.onsuccess = () => {
-        resolve(request.result);
-      };
-
-      request.onerror = (event) => {
-        console.error(`Error al obtener todos de ${storeName}:`, event.target.error);
-        reject(event.target.error);
-      };
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = (event) => reject(event.target.error);
     });
   }
 
-  // Método genérico para actualizar un registro
   async update(storeName, data) {
     await this.init();
     
@@ -181,18 +181,11 @@ class LocalDatabase {
       const store = transaction.objectStore(storeName);
       const request = store.put(data);
 
-      request.onsuccess = () => {
-        resolve(request.result);
-      };
-
-      request.onerror = (event) => {
-        console.error(`Error al actualizar en ${storeName}:`, event.target.error);
-        reject(event.target.error);
-      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = (event) => reject(event.target.error);
     });
   }
 
-  // Método genérico para eliminar un registro
   async delete(storeName, id) {
     await this.init();
     
@@ -201,18 +194,11 @@ class LocalDatabase {
       const store = transaction.objectStore(storeName);
       const request = store.delete(id);
 
-      request.onsuccess = () => {
-        resolve(true);
-      };
-
-      request.onerror = (event) => {
-        console.error(`Error al eliminar de ${storeName}:`, event.target.error);
-        reject(event.target.error);
-      };
+      request.onsuccess = () => resolve(true);
+      request.onerror = (event) => reject(event.target.error);
     });
   }
 
-  // Método para obtener registros por índice y rango
   async getByIndex(storeName, indexName, key) {
     await this.init();
     
@@ -222,18 +208,11 @@ class LocalDatabase {
       const index = store.index(indexName);
       const request = index.get(key);
 
-      request.onsuccess = () => {
-        resolve(request.result);
-      };
-
-      request.onerror = (event) => {
-        console.error(`Error al obtener por índice de ${storeName}:`, event.target.error);
-        reject(event.target.error);
-      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = (event) => reject(event.target.error);
     });
   }
 
-  // Método para obtener todos los registros por índice
   async getAllByIndex(storeName, indexName, key) {
     await this.init();
     
@@ -241,29 +220,59 @@ class LocalDatabase {
       const transaction = this.db.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
       const index = store.index(indexName);
-      const request = index.getAll(key);
+      const keyRange = IDBKeyRange.only(key);
+      const request = index.getAll(keyRange);
 
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  // ✅ MÉTODO CORREGIDO PARA OBTENER ITEMS DE SINCRONIZACIÓN PENDIENTES
+  async getPendingSyncItems(limit = 50) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['sync_queue'], 'readonly');
+      const store = transaction.objectStore('sync_queue');
+      
+      // Obtener todos los items
+      const request = store.getAll();
+      
       request.onsuccess = () => {
-        resolve(request.result);
+        const items = request.result || [];
+        
+        // Filtrar manualmente items pendientes (estado = 'pendiente')
+        const pendingItems = items.filter(item => item.estado === 'pendiente');
+        
+        // Ordenar por fecha_creacion (más antiguos primero)
+        pendingItems.sort((a, b) => {
+          const dateA = new Date(a.fecha_creacion || 0);
+          const dateB = new Date(b.fecha_creacion || 0);
+          return dateA - dateB;
+        });
+        
+        // Limitar cantidad
+        resolve(pendingItems.slice(0, limit));
       };
 
       request.onerror = (event) => {
-        console.error(`Error al obtener todos por índice de ${storeName}:`, event.target.error);
+        console.error('Error al obtener items de sincronización:', event.target.error);
         reject(event.target.error);
       };
     });
   }
 
-  // Método para agregar a la cola de sincronización
+  // ✅ MÉTODO CORREGIDO PARA AGREGAR A LA COLA DE SINCRONIZACIÓN
   async addToSyncQueue(action, table, recordId, data) {
     const syncItem = {
-      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      id: `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       action: action, // 'INSERT', 'UPDATE', 'DELETE'
       table: table,
       record_id: recordId,
       data: data,
+      estado: 'pendiente', // 'pendiente', 'procesando', 'completado', 'error'
       intentos: 0,
-      procesado: false,
       fecha_creacion: new Date().toISOString(),
       fecha_actualizacion: new Date().toISOString()
     };
@@ -271,44 +280,18 @@ class LocalDatabase {
     return this.add('sync_queue', syncItem);
   }
 
-  // Método para obtener cambios pendientes de sincronización
-  async getPendingSyncItems(limit = 50) {
-    await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['sync_queue'], 'readonly');
-      const store = transaction.objectStore('sync_queue');
-      const index = store.index('procesado');
-      
-      // Obtener items no procesados, ordenados por fecha
-      const request = index.getAll(IDBKeyRange.only(false));
-      
-      request.onsuccess = () => {
-        const items = request.result;
-        // Ordenar por fecha_creacion (más antiguos primero)
-        items.sort((a, b) => new Date(a.fecha_creacion) - new Date(b.fecha_creacion));
-        // Limitar cantidad
-        resolve(items.slice(0, limit));
-      };
-
-      request.onerror = (event) => {
-        console.error('Error al obtener items de sincronización pendientes:', event.target.error);
-        reject(event.target.error);
-      };
-    });
-  }
-
-  // Método para marcar item de sincronización como procesado
-  async markSyncItemProcessed(syncId) {
+  // ✅ MÉTODO CORREGIDO PARA MARCAR ITEM COMO PROCESADO
+  async markSyncItemProcessed(syncId, success = true, error = null) {
     const item = await this.get('sync_queue', syncId);
     if (item) {
-      item.procesado = true;
+      item.estado = success ? 'completado' : 'error';
+      item.intentos += 1;
+      item.error = error;
       item.fecha_actualizacion = new Date().toISOString();
       await this.update('sync_queue', item);
     }
   }
 
-  // Método para incrementar intentos de sincronización
   async incrementSyncAttempts(syncId) {
     const item = await this.get('sync_queue', syncId);
     if (item) {
@@ -318,46 +301,56 @@ class LocalDatabase {
     }
   }
 
-  // Método para limpiar items de sincronización procesados (más de 7 días)
-  async cleanupOldSyncItems() {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  async cleanupOldSyncItems(days = 7) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
     
     const allItems = await this.getAll('sync_queue');
-    const oldProcessedItems = allItems.filter(item => 
-      item.procesado && new Date(item.fecha_creacion) < sevenDaysAgo
-    );
+    const oldItems = allItems.filter(item => {
+      const itemDate = new Date(item.fecha_creacion);
+      return itemDate < cutoffDate && item.estado === 'completado';
+    });
 
-    for (const item of oldProcessedItems) {
-      await this.delete('sync_queue', item.id);
+    let deletedCount = 0;
+    for (const item of oldItems) {
+      try {
+        await this.delete('sync_queue', item.id);
+        deletedCount++;
+      } catch (error) {
+        console.error('Error eliminando item antiguo:', error);
+      }
     }
 
-    console.log(`🗑️ Limpiados ${oldProcessedItems.length} items de sincronización antiguos`);
+    console.log(`🗑️ Limpiados ${deletedCount} items de sincronización antiguos`);
+    return deletedCount;
   }
 
-  // Método para obtener estadísticas de la base de datos
   async getStats() {
     const stores = [
-      'usuarios', 'empresas', 'contratos', 
-      'suplementos', 'certificaciones', 'pagos',
-      'sync_queue'
+      'usuarios', 'empresas', 'contratos', 'suplementos', 
+      'certificaciones', 'pagos', 'sync_queue', 'configuracion'
     ];
 
     const stats = {};
+    let totalItems = 0;
     
     for (const storeName of stores) {
       try {
         const items = await this.getAll(storeName);
-        stats[storeName] = items ? items.length : 0;
+        const count = items ? items.length : 0;
+        stats[storeName] = count;
+        totalItems += count;
       } catch (error) {
         stats[storeName] = 0;
       }
     }
 
+    stats.total = totalItems;
+    stats.lastUpdated = new Date().toISOString();
+    
     return stats;
   }
 
-  // Método para exportar toda la base de datos a JSON
   async exportToJSON() {
     await this.init();
     
@@ -374,21 +367,20 @@ class LocalDatabase {
     }
 
     // Agregar metadatos
-    exportData.metadata = {
+    exportData._metadata = {
       exportDate: new Date().toISOString(),
       dbName: this.dbName,
       dbVersion: this.dbVersion,
-      totalStores: storeNames.length
+      totalStores: storeNames.length,
+      appVersion: '2.0.0'
     };
 
     return exportData;
   }
 
-  // Método para importar datos desde JSON
   async importFromJSON(jsonData) {
     await this.init();
     
-    // Validar estructura básica
     if (!jsonData || typeof jsonData !== 'object') {
       throw new Error('Datos JSON inválidos');
     }
@@ -420,30 +412,40 @@ class LocalDatabase {
     }
 
     return {
-      success: true,
+      success: errorCount === 0,
       imported: importedCount,
       errors: errorCount,
       totalStores: storeNames.length
     };
   }
 
-  // Método para realizar backup automático
   async autoBackup() {
     try {
       const backupData = await this.exportToJSON();
-      const backupKey = `backup_${new Date().toISOString().split('T')[0]}`;
+      const backupKey = `backup_${new Date().toISOString().replace(/[:.]/g, '-')}`;
       
       // Guardar backup en localStorage como fallback
-      localStorage.setItem(backupKey, JSON.stringify(backupData));
+      const backupString = JSON.stringify(backupData);
+      if (backupString.length < 5 * 1024 * 1024) { // 5MB limit
+        localStorage.setItem(backupKey, backupString);
+      }
       
-      // Mantener solo los últimos 7 backups
+      // También guardar en IndexedDB
+      await this.add('backups', {
+        id: backupKey,
+        data: backupData,
+        fecha: new Date().toISOString(),
+        size: backupString.length
+      });
+
+      // Mantener solo los últimos 5 backups
       const backupKeys = Object.keys(localStorage)
         .filter(key => key.startsWith('backup_'))
         .sort()
         .reverse();
       
-      if (backupKeys.length > 7) {
-        for (let i = 7; i < backupKeys.length; i++) {
+      if (backupKeys.length > 5) {
+        for (let i = 5; i < backupKeys.length; i++) {
           localStorage.removeItem(backupKeys[i]);
         }
       }
@@ -464,16 +466,24 @@ class LocalDatabase {
     }
   }
 
-  // Método para restaurar desde backup
   async restoreFromBackup(backupKey) {
     try {
-      const backupData = localStorage.getItem(backupKey);
-      if (!backupData) {
-        throw new Error(`Backup ${backupKey} no encontrado`);
+      let backupData;
+      
+      // Intentar desde localStorage primero
+      const localStorageData = localStorage.getItem(backupKey);
+      if (localStorageData) {
+        backupData = JSON.parse(localStorageData);
+      } else {
+        // Intentar desde IndexedDB
+        const backupRecord = await this.get('backups', backupKey);
+        if (!backupRecord) {
+          throw new Error(`Backup ${backupKey} no encontrado`);
+        }
+        backupData = backupRecord.data;
       }
 
-      const parsedData = JSON.parse(backupData);
-      const result = await this.importFromJSON(parsedData);
+      const result = await this.importFromJSON(backupData);
 
       console.log(`✅ Restauración completada desde ${backupKey}`);
       return {
@@ -490,10 +500,9 @@ class LocalDatabase {
     }
   }
 
-  // Método para limpiar datos antiguos (más de 1 año)
-  async cleanupOldData() {
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  async cleanupOldData(days = 365) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
     
     let cleanedCount = 0;
     const storesToClean = ['certificaciones', 'pagos'];
@@ -502,8 +511,8 @@ class LocalDatabase {
       try {
         const items = await this.getAll(storeName);
         const oldItems = items.filter(item => {
-          const itemDate = new Date(item.fecha_creacion || item.fecha_pago || item.mes);
-          return itemDate < oneYearAgo;
+          const itemDate = new Date(item.fecha_creacion || item.fecha_pago || item.mes || 0);
+          return itemDate < cutoffDate;
         });
 
         for (const item of oldItems) {
@@ -519,7 +528,6 @@ class LocalDatabase {
     return cleanedCount;
   }
 
-  // Método para migrar desde localStorage (si existe)
   async migrateFromLocalStorage() {
     try {
       const legacyData = localStorage.getItem('commissionManagerData');
@@ -530,12 +538,12 @@ class LocalDatabase {
       const parsedData = JSON.parse(legacyData);
       let migratedCount = 0;
 
-      // Mapear datos legacy a la nueva estructura
+      // Mapear datos legacy
       if (parsedData.empresas) {
         for (const empresa of parsedData.empresas) {
           try {
             await this.add('empresas', {
-              id: empresa.id || `legacy_${Date.now()}_${Math.random()}`,
+              id: empresa.id || `legacy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               ...empresa,
               fecha_creacion: new Date().toISOString(),
               fecha_actualizacion: new Date().toISOString()
@@ -564,7 +572,6 @@ class LocalDatabase {
     }
   }
 
-  // Método para verificar integridad de la base de datos
   async checkIntegrity() {
     const issues = [];
     const storeNames = Array.from(this.db.objectStoreNames);
@@ -590,7 +597,6 @@ class LocalDatabase {
     };
   }
 
-  // Método para resetear la base de datos (solo en desarrollo)
   async resetDatabase() {
     return new Promise((resolve, reject) => {
       const request = indexedDB.deleteDatabase(this.dbName);
@@ -613,10 +619,49 @@ class LocalDatabase {
       };
     });
   }
+
+  // Métodos específicos para la aplicación
+  async getUserByEmail(email) {
+    return this.getByIndex('usuarios', 'email', email);
+  }
+
+  async getEmpresasByUsuario(usuarioId) {
+    return this.getAllByIndex('empresas', 'usuario_id', usuarioId);
+  }
+
+  async getContratosByEmpresa(empresaId) {
+    return this.getAllByIndex('contratos', 'empresa_id', empresaId);
+  }
+
+  async getCertificacionesByContrato(contratoId) {
+    return this.getAllByIndex('certificaciones', 'contrato_id', contratoId);
+  }
+
+  async getPagosByEmpresa(empresaId) {
+    return this.getAllByIndex('pagos', 'empresa_id', empresaId);
+  }
+
+  async getConfig(key) {
+    const config = await this.get('configuracion', key);
+    return config ? config.value : null;
+  }
+
+  async setConfig(key, value) {
+    await this.update('configuracion', {
+      key: key,
+      value: value,
+      updated: new Date().toISOString()
+    });
+  }
 }
 
-// Exportar instancia única
+// Crear instancia única
 const localDB = new LocalDatabase();
-window.localDB = localDB; // Para acceso global
+
+// Hacer disponible globalmente
+window.localDB = localDB;
+
+// Inicializar automáticamente cuando se importa
+localDB.init().catch(console.error);
 
 export { localDB };
