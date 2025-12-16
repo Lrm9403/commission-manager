@@ -1,84 +1,273 @@
-// Configuración de Supabase
-import { createClient } from 'https://esm.sh/@supabase/supabase-js';
+// Integración con Supabase - Commission Manager Pro
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
 const supabaseUrl = 'https://axpgwncduujxficolgyt.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4cGd3bmNkdXVqeGZpY29sZ3l0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU5MDU0NDgsImV4cCI6MjA4MTQ4MTQ0OH0.jCuEskTd5JJt7C_iS7_GzMwA7wOnGHQsT0tFzVLm9CE';
 
-// Crear cliente de Supabase
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Crear cliente con configuración optimizada
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    storage: window.localStorage,
+    storageKey: 'supabase.auth.token'
+  },
+  global: {
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    }
+  }
+});
 
-// Clase para manejar operaciones con Supabase
 class SupabaseManager {
   constructor() {
     this.supabase = supabase;
     this.user = null;
     this.session = null;
+    this.profile = null;
+    this.isOnline = navigator.onLine;
+    
+    // Inicializar listeners de conexión
+    window.addEventListener('online', () => this.handleOnline());
+    window.addEventListener('offline', () => this.handleOffline());
+    
+    // Inicializar
+    this.init();
   }
 
-  // Inicializar sesión desde almacenamiento local
-  async initSession() {
+  async init() {
+    console.log('🔧 Inicializando Supabase Manager...');
+    
     try {
-      const { data: { session } } = await this.supabase.auth.getSession();
-      this.session = session;
+      // Restaurar sesión
+      await this.restoreSession();
       
-      if (session) {
-        this.user = session.user;
-        console.log('✅ Sesión de Supabase restaurada');
+      // Verificar conexión
+      await this.checkConnection();
+      
+      console.log('✅ Supabase Manager inicializado');
+    } catch (error) {
+      console.error('❌ Error inicializando Supabase Manager:', error);
+    }
+  }
+
+  async restoreSession() {
+    try {
+      const { data: { session }, error } = await this.supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Error obteniendo sesión:', error);
+        return null;
       }
       
-      return session;
+      if (session) {
+        this.session = session;
+        this.user = session.user;
+        console.log('🔑 Sesión restaurada:', this.user.email);
+        
+        // Cargar perfil
+        await this.loadProfile();
+        
+        return session;
+      }
+      
+      return null;
     } catch (error) {
-      console.error('Error al inicializar sesión:', error);
+      console.error('Error restaurando sesión:', error);
       return null;
     }
   }
 
-  // Registrar usuario
+  async loadProfile() {
+    if (!this.user) return null;
+    
+    try {
+      // Primero intentar desde Supabase
+      const { data, error } = await this.supabase
+        .from('usuarios')
+        .select('*')
+        .eq('auth_id', this.user.id)
+        .maybeSingle(); // Usar maybeSingle en lugar de single
+      
+      if (error) {
+        console.warn('Error cargando perfil desde Supabase:', error.message);
+        
+        // Si es error 406 (Not Acceptable) u otro error, usar datos locales
+        if (error.code === '406' || error.code === 'PGRST116') {
+          console.log('🔄 Usando datos locales para perfil');
+          return await this.getLocalProfile();
+        }
+        throw error;
+      }
+      
+      if (data) {
+        this.profile = data;
+        
+        // Sincronizar con local
+        await localDB.update('usuarios', {
+          ...data,
+          fecha_actualizacion: new Date().toISOString()
+        }).catch(() => {
+          // Si falla, intentar agregar
+          localDB.add('usuarios', {
+            ...data,
+            fecha_creacion: new Date().toISOString(),
+            fecha_actualizacion: new Date().toISOString()
+          });
+        });
+        
+        return data;
+      }
+      
+      // Si no hay datos en Supabase, crear perfil básico
+      return await this.createInitialProfile();
+      
+    } catch (error) {
+      console.error('Error crítico cargando perfil:', error);
+      return await this.getLocalProfile();
+    }
+  }
+
+  async getLocalProfile() {
+    try {
+      const localProfile = await localDB.getByIndex('usuarios', 'auth_id', this.user.id);
+      if (localProfile) {
+        this.profile = localProfile;
+        return localProfile;
+      }
+      
+      // Crear perfil local básico
+      const basicProfile = {
+        id: `local_${this.user.id}`,
+        auth_id: this.user.id,
+        nombre: this.user.user_metadata?.nombre || 'Usuario',
+        nombre_usuario: this.user.user_metadata?.nombre_usuario || this.user.email.split('@')[0],
+        email: this.user.email,
+        config_moneda: 'USD',
+        config_tema: 'auto',
+        fecha_creacion: new Date().toISOString(),
+        fecha_actualizacion: new Date().toISOString()
+      };
+      
+      await localDB.add('usuarios', basicProfile);
+      this.profile = basicProfile;
+      
+      // Agregar a cola de sincronización
+      await localDB.addToSyncQueue('INSERT', 'usuarios', basicProfile.id, basicProfile);
+      
+      return basicProfile;
+    } catch (error) {
+      console.error('Error obteniendo perfil local:', error);
+      return null;
+    }
+  }
+
+  async createInitialProfile() {
+    if (!this.user) return null;
+    
+    const profileData = {
+      auth_id: this.user.id,
+      nombre: this.user.user_metadata?.nombre || 'Usuario',
+      nombre_usuario: this.user.user_metadata?.nombre_usuario || this.user.email.split('@')[0],
+      email: this.user.email,
+      config_moneda: 'USD',
+      config_tema: 'auto',
+      fecha_creacion: new Date().toISOString()
+    };
+
+    try {
+      const { data, error } = await this.supabase
+        .from('usuarios')
+        .insert([profileData])
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('Error creando perfil en Supabase:', error);
+        
+        // Guardar localmente
+        const localProfile = {
+          ...profileData,
+          id: `local_${this.user.id}`,
+          fecha_actualizacion: new Date().toISOString()
+        };
+        
+        await localDB.add('usuarios', localProfile);
+        this.profile = localProfile;
+        
+        // Agregar a cola de sincronización
+        await localDB.addToSyncQueue('INSERT', 'usuarios', localProfile.id, localProfile);
+        
+        return localProfile;
+      }
+
+      this.profile = data;
+      
+      // Guardar localmente también
+      await localDB.add('usuarios', {
+        ...data,
+        fecha_actualizacion: new Date().toISOString()
+      });
+      
+      return data;
+    } catch (error) {
+      console.error('Error creando perfil inicial:', error);
+      return await this.getLocalProfile();
+    }
+  }
+
   async register(email, password, userData) {
+    console.log('📝 Registrando usuario:', email);
+    
     try {
       const { data, error } = await this.supabase.auth.signUp({
         email,
         password,
         options: {
-          data: userData
+          data: {
+            nombre: userData.nombre,
+            nombre_usuario: userData.nombre_usuario,
+            email_verified: false
+          },
+          emailRedirectTo: window.location.origin
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error en registro:', error);
+        return {
+          success: false,
+          error: this.translateAuthError(error.message),
+          code: error.code
+        };
+      }
 
       if (data.user) {
         this.user = data.user;
         this.session = data.session;
         
-        // Crear perfil en la tabla usuarios
-        const profileData = {
-          auth_id: data.user.id,
-          nombre: userData.nombre || '',
-          nombre_usuario: userData.nombre_usuario || email.split('@')[0],
-          email: email,
-          config_moneda: 'USD',
-          config_tema: 'auto',
-          fecha_creacion: new Date().toISOString()
-        };
-
-        const { error: profileError } = await this.supabase
-          .from('usuarios')
-          .insert([profileData]);
-
-        if (profileError) {
-          console.warn('Error al crear perfil:', profileError);
-        }
-
+        console.log('✅ Usuario registrado:', data.user.email);
+        
+        // Esperar un momento antes de crear el perfil
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Crear perfil (esto se hará automáticamente en loadProfile)
+        await this.loadProfile();
+        
         return {
           success: true,
           user: data.user,
-          session: data.session
+          session: data.session,
+          message: 'Registro exitoso. Por favor verifica tu email.'
         };
       }
 
       return {
         success: false,
-        error: 'No se pudo crear el usuario'
+        error: 'No se pudo crear el usuario',
+        needsEmailVerification: true
       };
     } catch (error) {
       console.error('Error en registro:', error);
@@ -89,19 +278,32 @@ class SupabaseManager {
     }
   }
 
-  // Iniciar sesión
   async login(email, password) {
+    console.log('🔑 Iniciando sesión:', email);
+    
     try {
       const { data, error } = await this.supabase.auth.signInWithPassword({
         email,
         password
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error en login:', error);
+        return {
+          success: false,
+          error: this.translateAuthError(error.message),
+          code: error.code
+        };
+      }
 
       this.user = data.user;
       this.session = data.session;
-
+      
+      console.log('✅ Sesión iniciada:', data.user.email);
+      
+      // Cargar perfil
+      await this.loadProfile();
+      
       return {
         success: true,
         user: data.user,
@@ -116,16 +318,26 @@ class SupabaseManager {
     }
   }
 
-  // Cerrar sesión
   async logout() {
+    console.log('🚪 Cerrando sesión...');
+    
     try {
       const { error } = await this.supabase.auth.signOut();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error en logout:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
 
       this.user = null;
       this.session = null;
-
+      this.profile = null;
+      
+      console.log('✅ Sesión cerrada');
+      
       return { success: true };
     } catch (error) {
       console.error('Error en logout:', error);
@@ -136,7 +348,6 @@ class SupabaseManager {
     }
   }
 
-  // Recuperar contraseña
   async resetPassword(email) {
     try {
       const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
@@ -145,7 +356,10 @@ class SupabaseManager {
 
       if (error) throw error;
 
-      return { success: true };
+      return { 
+        success: true,
+        message: 'Se ha enviado un email con las instrucciones para restablecer tu contraseña.'
+      };
     } catch (error) {
       console.error('Error en recuperación:', error);
       return {
@@ -155,7 +369,6 @@ class SupabaseManager {
     }
   }
 
-  // Cambiar contraseña
   async updatePassword(newPassword) {
     try {
       const { error } = await this.supabase.auth.updateUser({
@@ -164,7 +377,10 @@ class SupabaseManager {
 
       if (error) throw error;
 
-      return { success: true };
+      return { 
+        success: true,
+        message: 'Contraseña actualizada correctamente.'
+      };
     } catch (error) {
       console.error('Error al cambiar contraseña:', error);
       return {
@@ -174,46 +390,55 @@ class SupabaseManager {
     }
   }
 
-  // Obtener perfil del usuario
-  async getUserProfile() {
-    if (!this.user) return null;
-
-    try {
-      const { data, error } = await this.supabase
-        .from('usuarios')
-        .select('*')
-        .eq('auth_id', this.user.id)
-        .single();
-
-      if (error) throw error;
-
-      return data;
-    } catch (error) {
-      console.error('Error al obtener perfil:', error);
-      return null;
-    }
-  }
-
-  // Actualizar perfil
   async updateProfile(profileData) {
-    if (!this.user) return null;
+    if (!this.user || !this.profile) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
 
     try {
-      const { data, error } = await this.supabase
-        .from('usuarios')
-        .update({
-          ...profileData,
-          fecha_actualizacion: new Date().toISOString()
-        })
-        .eq('auth_id', this.user.id)
-        .select()
-        .single();
+      const updatedData = {
+        ...profileData,
+        fecha_actualizacion: new Date().toISOString()
+      };
 
-      if (error) throw error;
+      // Actualizar localmente primero
+      await localDB.update('usuarios', {
+        ...this.profile,
+        ...updatedData
+      });
+
+      // Actualizar en Supabase si hay conexión
+      if (this.isOnline) {
+        const { data, error } = await this.supabase
+          .from('usuarios')
+          .update(updatedData)
+          .eq('auth_id', this.user.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.warn('Error actualizando perfil en Supabase:', error);
+          
+          // Agregar a cola de sincronización
+          await localDB.addToSyncQueue('UPDATE', 'usuarios', this.profile.id, updatedData);
+        } else {
+          this.profile = data;
+        }
+      } else {
+        // Si está offline, agregar a cola de sincronización
+        await localDB.addToSyncQueue('UPDATE', 'usuarios', this.profile.id, updatedData);
+      }
+
+      // Actualizar perfil local
+      this.profile = { ...this.profile, ...updatedData };
 
       return {
         success: true,
-        profile: data
+        profile: this.profile,
+        message: 'Perfil actualizado'
       };
     } catch (error) {
       console.error('Error al actualizar perfil:', error);
@@ -224,31 +449,43 @@ class SupabaseManager {
     }
   }
 
-  // Eliminar cuenta
   async deleteAccount() {
-    if (!this.user) return null;
+    if (!this.user) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
 
     try {
-      // Primero eliminar perfil
-      const { error: profileError } = await this.supabase
-        .from('usuarios')
-        .delete()
-        .eq('auth_id', this.user.id);
+      // 1. Eliminar datos locales
+      await localDB.delete('usuarios', this.profile?.id || this.user.id);
+      
+      // 2. Eliminar empresas y datos relacionados localmente
+      const empresas = await localDB.getEmpresasByUsuario(this.profile?.id || this.user.id);
+      for (const empresa of empresas) {
+        await localDB.delete('empresas', empresa.id);
+      }
+      
+      // 3. Cerrar sesión
+      await this.logout();
+      
+      // 4. Intentar eliminar de Supabase (si hay conexión)
+      if (this.isOnline) {
+        const { error } = await this.supabase
+          .from('usuarios')
+          .delete()
+          .eq('auth_id', this.user.id);
+          
+        if (error) {
+          console.warn('No se pudo eliminar cuenta de Supabase:', error);
+        }
+      }
 
-      if (profileError) throw profileError;
-
-      // Luego eliminar usuario de auth
-      const { error: authError } = await this.supabase.auth.admin.deleteUser(
-        this.user.id
-      );
-
-      if (authError) throw authError;
-
-      // Cerrar sesión localmente
-      this.user = null;
-      this.session = null;
-
-      return { success: true };
+      return {
+        success: true,
+        message: 'Cuenta eliminada correctamente'
+      };
     } catch (error) {
       console.error('Error al eliminar cuenta:', error);
       return {
@@ -258,131 +495,186 @@ class SupabaseManager {
     }
   }
 
-  // Sincronizar datos locales con Supabase
-  async syncLocalData(localData) {
+  async getUserProfile() {
+    return this.profile;
+  }
+
+  async getEmpresas() {
+    if (!this.profile) return [];
+    
     try {
-      const results = {
-        success: [],
-        failed: []
+      let empresas = [];
+      
+      // Intentar obtener de Supabase si hay conexión
+      if (this.isOnline) {
+        const { data, error } = await this.supabase
+          .from('empresas')
+          .select('*')
+          .eq('usuario_id', this.profile.id)
+          .order('fecha_creacion', { ascending: false });
+
+        if (!error && data) {
+          empresas = data;
+          
+          // Sincronizar con local
+          for (const empresa of empresas) {
+            await localDB.update('empresas', {
+              ...empresa,
+              fecha_actualizacion: new Date().toISOString()
+            }).catch(() => {
+              localDB.add('empresas', {
+                ...empresa,
+                fecha_creacion: new Date().toISOString(),
+                fecha_actualizacion: new Date().toISOString()
+              });
+            });
+          }
+        }
+      }
+      
+      // Si no hay datos online o hay error, obtener locales
+      if (empresas.length === 0) {
+        empresas = await localDB.getEmpresasByUsuario(this.profile.id);
+      }
+      
+      return empresas;
+    } catch (error) {
+      console.error('Error obteniendo empresas:', error);
+      return await localDB.getEmpresasByUsuario(this.profile.id);
+    }
+  }
+
+  async createEmpresa(empresaData) {
+    if (!this.profile) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
+
+    try {
+      const empresaId = `emp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const empresaCompleta = {
+        id: empresaId,
+        usuario_id: this.profile.id,
+        ...empresaData,
+        estado: empresaData.estado || 'activa',
+        comision_default: empresaData.comision_default || 1.00,
+        fecha_creacion: new Date().toISOString(),
+        fecha_actualizacion: new Date().toISOString()
       };
 
-      // Sincronizar empresas
-      if (localData.empresas && localData.empresas.length > 0) {
-        for (const empresa of localData.empresas) {
-          try {
-            const { data, error } = await this.supabase
-              .from('empresas')
-              .upsert(empresa, { 
-                onConflict: 'id',
-                ignoreDuplicates: false 
-              });
-
-            if (error) throw error;
-
-            results.success.push({
-              table: 'empresas',
-              id: empresa.id
-            });
-          } catch (error) {
-            results.failed.push({
-              table: 'empresas',
-              id: empresa.id,
-              error: error.message
-            });
-          }
-        }
-      }
-
-      // Sincronizar contratos
-      if (localData.contratos && localData.contratos.length > 0) {
-        for (const contrato of localData.contratos) {
-          try {
-            const { data, error } = await this.supabase
-              .from('contratos')
-              .upsert(contrato, { 
-                onConflict: 'id',
-                ignoreDuplicates: false 
-              });
-
-            if (error) throw error;
-
-            results.success.push({
-              table: 'contratos',
-              id: contrato.id
-            });
-          } catch (error) {
-            results.failed.push({
-              table: 'contratos',
-              id: contrato.id,
-              error: error.message
-            });
-          }
-        }
-      }
-
-      // Sincronizar certificaciones
-      if (localData.certificaciones && localData.certificaciones.length > 0) {
-        for (const certificacion of localData.certificaciones) {
-          try {
-            const { data, error } = await this.supabase
-              .from('certificaciones')
-              .upsert(certificacion, { 
-                onConflict: 'id',
-                ignoreDuplicates: false 
-              });
-
-            if (error) throw error;
-
-            results.success.push({
-              table: 'certificaciones',
-              id: certificacion.id
-            });
-          } catch (error) {
-            results.failed.push({
-              table: 'certificaciones',
-              id: certificacion.id,
-              error: error.message
-            });
-          }
-        }
-      }
-
-      // Sincronizar pagos
-      if (localData.pagos && localData.pagos.length > 0) {
-        for (const pago of localData.pagos) {
-          try {
-            const { data, error } = await this.supabase
-              .from('pagos')
-              .upsert(pago, { 
-                onConflict: 'id',
-                ignoreDuplicates: false 
-              });
-
-            if (error) throw error;
-
-            results.success.push({
-              table: 'pagos',
-              id: pago.id
-            });
-          } catch (error) {
-            results.failed.push({
-              table: 'pagos',
-              id: pago.id,
-              error: error.message
-            });
-          }
-        }
-      }
+      // Guardar localmente
+      await localDB.add('empresas', empresaCompleta);
+      
+      // Agregar a cola de sincronización
+      await localDB.addToSyncQueue('INSERT', 'empresas', empresaId, empresaCompleta);
 
       return {
         success: true,
-        results: results,
-        summary: {
-          total: results.success.length + results.failed.length,
-          success: results.success.length,
-          failed: results.failed.length
-        }
+        empresa: empresaCompleta,
+        message: 'Empresa creada correctamente'
       };
+    } catch (error) {
+      console.error('Error creando empresa:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async syncData() {
+    if (!this.isOnline) {
+      return {
+        success: false,
+        error: 'Sin conexión a internet'
+      };
+    }
+
+    console.log('🔄 Iniciando sincronización de datos...');
+    
+    try {
+      // 1. Obtener cambios pendientes locales
+      const pendingItems = await localDB.getPendingSyncItems();
+      
+      if (pendingItems.length === 0) {
+        return {
+          success: true,
+          message: 'No hay cambios pendientes para sincronizar',
+          synced: 0
+        };
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+      
+      // 2. Procesar cada cambio
+      for (const item of pendingItems) {
+        try {
+          // Marcar como procesando
+          await localDB.update('sync_queue', {
+            ...item,
+            estado: 'procesando',
+            fecha_actualizacion: new Date().toISOString()
+          });
+
+          let result;
+          
+          switch (item.action) {
+            case 'INSERT':
+              result = await this.supabase
+                .from(item.table)
+                .insert([item.data]);
+              break;
+              
+            case 'UPDATE':
+              result = await this.supabase
+                .from(item.table)
+                .update(item.data)
+                .eq('id', item.record_id);
+              break;
+              
+            case 'DELETE':
+              result = await this.supabase
+                .from(item.table)
+                .delete()
+                .eq('id', item.record_id);
+              break;
+          }
+
+          if (result.error) {
+            throw new Error(result.error.message);
+          }
+
+          // Marcar como completado
+          await localDB.markSyncItemProcessed(item.id, true);
+          successCount++;
+          
+        } catch (error) {
+          console.error(`Error sincronizando ${item.table} ${item.record_id}:`, error);
+          
+          // Marcar como error si tiene muchos intentos
+          if (item.intentos >= 3) {
+            await localDB.markSyncItemProcessed(item.id, false, error.message);
+          } else {
+            await localDB.incrementSyncAttempts(item.id);
+          }
+          
+          errorCount++;
+        }
+      }
+
+      console.log(`✅ Sincronización completada: ${successCount} exitosos, ${errorCount} fallidos`);
+      
+      return {
+        success: errorCount === 0,
+        synced: successCount,
+        errors: errorCount,
+        message: `Sincronizados ${successCount} cambios`
+      };
+      
     } catch (error) {
       console.error('Error en sincronización:', error);
       return {
@@ -392,135 +684,101 @@ class SupabaseManager {
     }
   }
 
-  // Descargar datos desde Supabase
-  async downloadUserData() {
-    if (!this.user) return null;
-
-    try {
-      // Obtener perfil del usuario
-      const profile = await this.getUserProfile();
-      if (!profile) throw new Error('No se encontró el perfil del usuario');
-
-      // Obtener empresas del usuario
-      const { data: empresas, error: empresasError } = await this.supabase
-        .from('empresas')
-        .select('*')
-        .eq('usuario_id', profile.id);
-
-      if (empresasError) throw empresasError;
-
-      // Obtener contratos de las empresas
-      let allContratos = [];
-      let allSuplementos = [];
-      let allCertificaciones = [];
-      let allPagos = [];
-      let allPagosDistribucion = [];
-
-      for (const empresa of empresas) {
-        // Contratos de la empresa
-        const { data: contratos, error: contratosError } = await this.supabase
-          .from('contratos')
-          .select('*')
-          .eq('empresa_id', empresa.id);
-
-        if (!contratosError && contratos) {
-          allContratos = [...allContratos, ...contratos];
-
-          // Para cada contrato, obtener suplementos y certificaciones
-          for (const contrato of contratos) {
-            // Suplementos del contrato
-            const { data: suplementos } = await this.supabase
-              .from('suplementos')
-              .select('*')
-              .eq('contrato_id', contrato.id);
-
-            if (suplementos) {
-              allSuplementos = [...allSuplementos, ...suplementos];
-            }
-
-            // Certificaciones del contrato
-            const { data: certificaciones } = await this.supabase
-              .from('certificaciones')
-              .select('*')
-              .eq('contrato_id', contrato.id);
-
-            if (certificaciones) {
-              allCertificaciones = [...allCertificaciones, ...certificaciones];
-            }
-          }
-        }
-
-        // Pagos de la empresa
-        const { data: pagos, error: pagosError } = await this.supabase
-          .from('pagos')
-          .select('*')
-          .eq('empresa_id', empresa.id);
-
-        if (!pagosError && pagos) {
-          allPagos = [...allPagos, ...pagos];
-
-          // Para cada pago, obtener distribución
-          for (const pago of pagos) {
-            const { data: distribucion } = await this.supabase
-              .from('pagos_distribucion')
-              .select('*')
-              .eq('pago_id', pago.id);
-
-            if (distribucion) {
-              allPagosDistribucion = [...allPagosDistribucion, ...distribucion];
-            }
-          }
-        }
-      }
-
-      return {
-        usuario: profile,
-        empresas: empresas || [],
-        contratos: allContratos || [],
-        suplementos: allSuplementos || [],
-        certificaciones: allCertificaciones || [],
-        pagos: allPagos || [],
-        pagos_distribucion: allPagosDistribucion || [],
-        metadata: {
-          downloadDate: new Date().toISOString(),
-          userId: this.user.id,
-          totalEmpresas: empresas?.length || 0,
-          totalContratos: allContratos.length,
-          totalCertificaciones: allCertificaciones.length,
-          totalPagos: allPagos.length
-        }
-      };
-    } catch (error) {
-      console.error('Error al descargar datos:', error);
-      return null;
-    }
-  }
-
-  // Verificar conexión a Supabase
   async checkConnection() {
     try {
+      const startTime = Date.now();
+      
       const { data, error } = await this.supabase
         .from('usuarios')
-        .select('count')
+        .select('count', { count: 'exact', head: true })
         .limit(1);
 
-      if (error) throw error;
+      const latency = Date.now() - startTime;
+      
+      if (error) {
+        this.isOnline = false;
+        return {
+          connected: false,
+          error: error.message,
+          latency
+        };
+      }
 
+      this.isOnline = true;
       return {
         connected: true,
-        latency: Date.now() // Podríamos medir latencia aquí
+        latency,
+        timestamp: new Date().toISOString()
       };
     } catch (error) {
-      console.error('Error de conexión a Supabase:', error);
+      this.isOnline = false;
       return {
         connected: false,
-        error: error.message
+        error: error.message,
+        timestamp: new Date().toISOString()
       };
     }
   }
 
-  // Subir archivo (logo de empresa)
+  async handleOnline() {
+    console.log('🌐 Conexión restablecida');
+    this.isOnline = true;
+    
+    // Intentar sincronizar automáticamente
+    setTimeout(async () => {
+      try {
+        await this.syncData();
+      } catch (error) {
+        console.error('Error en sincronización automática:', error);
+      }
+    }, 2000);
+  }
+
+  async handleOffline() {
+    console.log('📴 Sin conexión');
+    this.isOnline = false;
+  }
+
+  translateAuthError(errorMessage) {
+    const translations = {
+      'Invalid login credentials': 'Credenciales inválidas',
+      'Email not confirmed': 'Email no confirmado',
+      'User already registered': 'Usuario ya registrado',
+      'Password should be at least 6 characters': 'La contraseña debe tener al menos 6 caracteres',
+      'Invalid email': 'Email inválido',
+      'User not found': 'Usuario no encontrado',
+      'Unable to validate email address: invalid format': 'Formato de email inválido'
+    };
+    
+    return translations[errorMessage] || errorMessage;
+  }
+
+  // Métodos de utilidad
+  isAuthenticated() {
+    return !!this.user;
+  }
+
+  getUserId() {
+    return this.user?.id;
+  }
+
+  getUserEmail() {
+    return this.user?.email;
+  }
+
+  getSession() {
+    return this.session;
+  }
+
+  // Subida de archivos (logos)
   async uploadFile(bucket, file, path) {
+    if (!this.isOnline) {
+      return {
+        success: false,
+        error: 'Sin conexión a internet'
+      };
+    }
+
     try {
       const { data, error } = await this.supabase.storage
         .from(bucket)
@@ -539,7 +797,8 @@ class SupabaseManager {
       return {
         success: true,
         path: data.path,
-        url: publicUrl
+        url: publicUrl,
+        message: 'Archivo subido correctamente'
       };
     } catch (error) {
       console.error('Error al subir archivo:', error);
@@ -550,8 +809,14 @@ class SupabaseManager {
     }
   }
 
-  // Eliminar archivo
   async deleteFile(bucket, path) {
+    if (!this.isOnline) {
+      return {
+        success: false,
+        error: 'Sin conexión a internet'
+      };
+    }
+
     try {
       const { data, error } = await this.supabase.storage
         .from(bucket)
@@ -559,7 +824,10 @@ class SupabaseManager {
 
       if (error) throw error;
 
-      return { success: true };
+      return { 
+        success: true,
+        message: 'Archivo eliminado correctamente'
+      };
     } catch (error) {
       console.error('Error al eliminar archivo:', error);
       return {
@@ -568,85 +836,13 @@ class SupabaseManager {
       };
     }
   }
-
-  // Obtener estadísticas del usuario
-  async getUserStats() {
-    if (!this.user) return null;
-
-    try {
-      const profile = await this.getUserProfile();
-      if (!profile) return null;
-
-      const { data: empresas, error: empresasError } = await this.supabase
-        .from('empresas')
-        .select('id')
-        .eq('usuario_id', profile.id);
-
-      if (empresasError) throw empresasError;
-
-      const empresaIds = empresas.map(e => e.id);
-      
-      let stats = {
-        totalEmpresas: empresas.length,
-        totalContratos: 0,
-        totalCertificaciones: 0,
-        totalPagos: 0,
-        montoTotalContratos: 0,
-        comisionesPendientes: 0,
-        comisionesPagadas: 0
-      };
-
-      if (empresaIds.length > 0) {
-        // Obtener contratos
-        const { data: contratos } = await this.supabase
-          .from('contratos')
-          .select('monto_base, estado')
-          .in('empresa_id', empresaIds);
-
-        if (contratos) {
-          stats.totalContratos = contratos.length;
-          stats.montoTotalContratos = contratos.reduce((sum, c) => sum + (c.monto_base || 0), 0);
-        }
-
-        // Obtener certificaciones
-        const { data: certificaciones } = await this.supabase
-          .from('certificaciones')
-          .select('comision_calculada')
-          .in('contrato_id', 
-            contratos ? contratos.map(c => c.id) : []
-          );
-
-        if (certificaciones) {
-          stats.totalCertificaciones = certificaciones.length;
-          const totalComisiones = certificaciones.reduce((sum, cert) => 
-            sum + (cert.comision_calculada || 0), 0
-          );
-          // Aquí necesitaríamos lógica para determinar cuáles están pagadas
-          stats.comisionesPendientes = totalComisiones;
-        }
-
-        // Obtener pagos
-        const { data: pagos } = await this.supabase
-          .from('pagos')
-          .select('monto_total')
-          .in('empresa_id', empresaIds);
-
-        if (pagos) {
-          stats.totalPagos = pagos.length;
-          stats.comisionesPagadas = pagos.reduce((sum, p) => sum + (p.monto_total || 0), 0);
-        }
-      }
-
-      return stats;
-    } catch (error) {
-      console.error('Error al obtener estadísticas:', error);
-      return null;
-    }
-  }
 }
 
-// Exportar instancia única
+// Crear instancia única
 const supabaseManager = new SupabaseManager();
+
+// Hacer disponible globalmente
 window.supabaseManager = supabaseManager;
 
+// Exportar
 export { supabaseManager };
