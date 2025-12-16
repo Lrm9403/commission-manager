@@ -3,7 +3,7 @@ class LocalDatabase {
   constructor() {
     this.db = null;
     this.dbName = 'CommissionManagerDB';
-    this.dbVersion = 4; // Versión incrementada para forzar actualización
+    this.dbVersion = 5; // Versión incrementada para forzar actualización
     this.initPromise = null;
   }
 
@@ -33,24 +33,32 @@ class LocalDatabase {
         // Tabla de usuarios
         if (!db.objectStoreNames.contains('usuarios')) {
           const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
-          userStore.createIndex('auth_id', 'auth_id', { unique: false }); // Cambiado a unique: false
-          userStore.createIndex('email', 'email', { unique: false }); // Cambiado a unique: false
-          userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false }); // Cambiado a unique: false
+          userStore.createIndex('auth_id', 'auth_id', { unique: false });
+          userStore.createIndex('email', 'email', { unique: false });
+          userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
         }
 
-        // Tabla de empresas
+        // Tabla de empresas - ACTUALIZADA para usar auth_id
         if (!db.objectStoreNames.contains('empresas')) {
           const companyStore = db.createObjectStore('empresas', { keyPath: 'id' });
           companyStore.createIndex('usuario_id', 'usuario_id', { unique: false });
+          companyStore.createIndex('auth_id', 'auth_id', { unique: false }); // NUEVO índice
           companyStore.createIndex('nombre', 'nombre', { unique: false });
           companyStore.createIndex('estado', 'estado', { unique: false });
+        } else {
+          // Actualizar store existente para agregar índice auth_id
+          const transaction = event.currentTarget.transaction;
+          const companyStore = transaction.objectStore('empresas');
+          if (!companyStore.indexNames.contains('auth_id')) {
+            companyStore.createIndex('auth_id', 'auth_id', { unique: false });
+          }
         }
 
         // Tabla de contratos
         if (!db.objectStoreNames.contains('contratos')) {
           const contractStore = db.createObjectStore('contratos', { keyPath: 'id' });
           contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
-          contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false }); // Cambiado a unique: false
+          contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false });
           contractStore.createIndex('estado', 'estado', { unique: false });
           contractStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
         }
@@ -67,7 +75,7 @@ class LocalDatabase {
           const certificationStore = db.createObjectStore('certificaciones', { keyPath: 'id' });
           certificationStore.createIndex('contrato_id', 'contrato_id', { unique: false });
           certificationStore.createIndex('mes', 'mes', { unique: false });
-          certificationStore.createIndex('contrato_mes', ['contrato_id', 'mes'], { unique: false }); // Cambiado a unique: false
+          certificationStore.createIndex('contrato_mes', ['contrato_id', 'mes'], { unique: false });
           certificationStore.createIndex('pagado', 'pagado', { unique: false });
         }
 
@@ -86,7 +94,7 @@ class LocalDatabase {
           distributionStore.createIndex('contrato_id', 'contrato_id', { unique: false });
         }
 
-        // ✅ TABLA DE SINCRONIZACIÓN CORREGIDA
+        // Tabla de sincronización
         if (!db.objectStoreNames.contains('sync_queue')) {
           const syncStore = db.createObjectStore('sync_queue', { 
             keyPath: 'id',
@@ -227,7 +235,7 @@ class LocalDatabase {
     });
   }
 
-  // ✅ MÉTODO CORREGIDO PARA OBTENER ITEMS DE SINCRONIZACIÓN PENDIENTES
+  // Método para obtener items de sincronización pendientes
   async getPendingSyncItems(limit = 50) {
     await this.init();
     
@@ -262,7 +270,7 @@ class LocalDatabase {
     });
   }
 
-  // ✅ MÉTODO CORREGIDO PARA AGREGAR A LA COLA DE SINCRONIZACIÓN
+  // Método para agregar a la cola de sincronización
   async addToSyncQueue(action, table, recordId, data) {
     const syncItem = {
       id: `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -279,7 +287,7 @@ class LocalDatabase {
     return this.add('sync_queue', syncItem);
   }
 
-  // ✅ MÉTODO CORREGIDO PARA MARCAR ITEM COMO PROCESADO
+  // Método para marcar item como procesado
   async markSyncItemProcessed(syncId, success = true, error = null) {
     const item = await this.get('sync_queue', syncId);
     if (item) {
@@ -619,13 +627,24 @@ class LocalDatabase {
     });
   }
 
-  // Métodos específicos para la aplicación
+  // Métodos específicos para la aplicación - ACTUALIZADOS
   async getUserByEmail(email) {
     return this.getByIndex('usuarios', 'email', email);
   }
 
   async getEmpresasByUsuario(usuarioId) {
+    // Primero intentar por auth_id (nuevo método)
+    const empresasByAuthId = await this.getAllByIndex('empresas', 'auth_id', usuarioId);
+    if (empresasByAuthId.length > 0) {
+      return empresasByAuthId;
+    }
+    
+    // Si no hay por auth_id, buscar por usuario_id (para compatibilidad)
     return this.getAllByIndex('empresas', 'usuario_id', usuarioId);
+  }
+
+  async getEmpresasByAuthId(authId) {
+    return this.getAllByIndex('empresas', 'auth_id', authId);
   }
 
   async getContratosByEmpresa(empresaId) {
@@ -651,6 +670,176 @@ class LocalDatabase {
       value: value,
       updated: new Date().toISOString()
     });
+  }
+
+  // Método para migrar empresas existentes a usar auth_id
+  async migrateEmpresasToAuthId(authId) {
+    try {
+      console.log(`🔄 Migrando empresas a usar auth_id: ${authId}`);
+      
+      // Obtener todas las empresas del usuario actual
+      const empresas = await this.getAll('empresas');
+      let migratedCount = 0;
+      
+      for (const empresa of empresas) {
+        // Si la empresa no tiene auth_id pero tiene usuario_id, migrarla
+        if (!empresa.auth_id && empresa.usuario_id) {
+          empresa.auth_id = authId;
+          await this.update('empresas', empresa);
+          migratedCount++;
+        }
+      }
+      
+      console.log(`✅ Migradas ${migratedCount} empresas a usar auth_id`);
+      return migratedCount;
+    } catch (error) {
+      console.error('Error migrando empresas:', error);
+      return 0;
+    }
+  }
+
+  // Método para limpiar empresas duplicadas
+  async cleanupDuplicateEmpresas() {
+    try {
+      const empresas = await this.getAll('empresas');
+      const empresasMap = new Map();
+      let deletedCount = 0;
+      
+      for (const empresa of empresas) {
+        const key = `${empresa.auth_id || empresa.usuario_id}_${empresa.nombre}`;
+        
+        if (empresasMap.has(key)) {
+          // Empresa duplicada, eliminar
+          await this.delete('empresas', empresa.id);
+          deletedCount++;
+        } else {
+          empresasMap.set(key, empresa);
+        }
+      }
+      
+      console.log(`🗑️ Eliminadas ${deletedCount} empresas duplicadas`);
+      return deletedCount;
+    } catch (error) {
+      console.error('Error limpiando empresas duplicadas:', error);
+      return 0;
+    }
+  }
+
+  // Método para obtener estadísticas detalladas
+  async getDetailedStats() {
+    const stats = await this.getStats();
+    
+    // Agregar estadísticas adicionales
+    try {
+      // Estadísticas de certificaciones por estado
+      const certificaciones = await this.getAll('certificaciones');
+      stats.certificaciones_pagadas = certificaciones.filter(c => c.pagado).length;
+      stats.certificaciones_pendientes = certificaciones.filter(c => !c.pagado).length;
+      
+      // Estadísticas de contratos por estado
+      const contratos = await this.getAll('contratos');
+      stats.contratos_activos = contratos.filter(c => c.estado === 'activo').length;
+      stats.contratos_completados = contratos.filter(c => c.estado === 'completado').length;
+      stats.contratos_cancelados = contratos.filter(c => c.estado === 'cancelado').length;
+      
+      // Total de montos
+      stats.total_monto_contratos = contratos.reduce((sum, c) => sum + (c.monto_base || 0), 0);
+      stats.total_comisiones = certificaciones.reduce((sum, c) => 
+        sum + (c.comision_editada || c.comision_calculada || 0), 0);
+      stats.total_comisiones_pagadas = certificaciones
+        .filter(c => c.pagado)
+        .reduce((sum, c) => sum + (c.comision_editada || c.comision_calculada || 0), 0);
+      
+    } catch (error) {
+      console.error('Error obteniendo estadísticas detalladas:', error);
+    }
+    
+    return stats;
+  }
+
+  // Método para verificar y reparar la base de datos
+  async verifyAndRepair() {
+    console.log('🔍 Verificando integridad de la base de datos...');
+    
+    const issues = [];
+    
+    try {
+      // Verificar que todas las tablas existan
+      const storeNames = Array.from(this.db.objectStoreNames);
+      const requiredStores = [
+        'usuarios', 'empresas', 'contratos', 'certificaciones',
+        'pagos', 'sync_queue', 'configuracion'
+      ];
+      
+      for (const store of requiredStores) {
+        if (!storeNames.includes(store)) {
+          issues.push(`Falta la tabla: ${store}`);
+        }
+      }
+      
+      // Verificar índices necesarios
+      const empresasStore = this.db.transaction(['empresas'], 'readonly').objectStore('empresas');
+      if (!empresasStore.indexNames.contains('auth_id')) {
+        issues.push('Falta índice auth_id en tabla empresas');
+      }
+      
+      if (issues.length === 0) {
+        console.log('✅ Base de datos verificada correctamente');
+        return {
+          success: true,
+          message: 'Base de datos en buen estado',
+          issues: []
+        };
+      } else {
+        console.warn(`⚠️ Se encontraron ${issues.length} problemas:`, issues);
+        return {
+          success: false,
+          message: 'Se encontraron problemas en la base de datos',
+          issues: issues
+        };
+      }
+      
+    } catch (error) {
+      console.error('Error verificando base de datos:', error);
+      return {
+        success: false,
+        message: 'Error al verificar base de datos',
+        error: error.message,
+        issues: []
+      };
+    }
+  }
+
+  // Método para optimizar la base de datos
+  async optimize() {
+    console.log('⚡ Optimizando base de datos...');
+    
+    try {
+      // Limpiar items de sincronización antiguos
+      await this.cleanupOldSyncItems();
+      
+      // Limpiar datos antiguos
+      await this.cleanupOldData(180); // 6 meses
+      
+      // Limpiar empresas duplicadas
+      await this.cleanupDuplicateEmpresas();
+      
+      // Crear backup automático
+      await this.autoBackup();
+      
+      console.log('✅ Base de datos optimizada');
+      return {
+        success: true,
+        message: 'Base de datos optimizada correctamente'
+      };
+    } catch (error) {
+      console.error('Error optimizando base de datos:', error);
+      return {
+        success: false,
+        message: 'Error al optimizar base de datos',
+        error: error.message
+      };
+    }
   }
 }
 
