@@ -1,4 +1,4 @@
-// Sistema de sincronización offline/online
+// Sistema de sincronización offline/online - Commission Manager Pro
 import { localDB } from './db.js';
 import { supabaseManager } from './supabase.js';
 
@@ -6,114 +6,131 @@ class SyncManager {
   constructor() {
     this.isOnline = navigator.onLine;
     this.isSyncing = false;
-    this.lastSync = null;
+    this.lastSync = localStorage.getItem('lastSync');
     this.syncInterval = null;
     this.retryCount = 0;
-    this.maxRetries = 3;
+    this.maxRetries = 5;
     
-    // Configuración de sincronización
+    // Configuración
     this.config = {
-      autoSync: true,
-      syncInterval: 30000, // 30 segundos
-      batchSize: 50,
-      conflictStrategy: 'last-write-wins' // 'last-write-wins', 'manual', 'server-wins'
+      autoSync: localStorage.getItem('autoSync') !== 'false',
+      syncInterval: parseInt(localStorage.getItem('syncInterval')) || 30000,
+      conflictStrategy: localStorage.getItem('conflictStrategy') || 'last-write-wins',
+      batchSize: 20
     };
     
+    // Estado
+    this.status = 'idle';
+    this.pendingChanges = 0;
+    this.lastError = null;
+    
+    // Inicializar
     this.init();
   }
 
-  // Inicializar sistema de sincronización
-  init() {
-    // Escuchar eventos de conexión
-    window.addEventListener('online', () => this.handleOnline());
-    window.addEventListener('offline', () => this.handleOffline());
+  async init() {
+    console.log('🔄 Sistema de sincronización inicializando...');
     
-    // Cargar configuración
-    this.loadConfig();
+    // Escuchar eventos de conexión
+    window.addEventListener('online', () => this.handleConnectionChange(true));
+    window.addEventListener('offline', () => this.handleConnectionChange(false));
+    
+    // Cargar cambios pendientes
+    await this.updatePendingCount();
     
     // Iniciar sincronización automática si está habilitada
-    if (this.config.autoSync && this.isOnline) {
+    if (this.config.autoSync) {
       this.startAutoSync();
     }
     
-    console.log('🔄 Sistema de sincronización inicializado');
+    // Actualizar estado inicial
+    this.updateConnectionStatus();
+    
+    console.log('✅ Sistema de sincronización listo');
   }
 
-  // Cargar configuración desde localStorage
-  loadConfig() {
-    const savedConfig = localStorage.getItem('syncConfig');
-    if (savedConfig) {
-      this.config = { ...this.config, ...JSON.parse(savedConfig) };
+  handleConnectionChange(isOnline) {
+    this.isOnline = isOnline;
+    
+    if (isOnline) {
+      console.log('🌐 Conexión restablecida');
+      this.updateConnectionStatus('online');
+      
+      // Intentar sincronizar después de 2 segundos
+      setTimeout(() => {
+        if (this.config.autoSync && !this.isSyncing) {
+          this.sync();
+        }
+      }, 2000);
+      
+      // Reanudar sincronización automática
+      this.startAutoSync();
+    } else {
+      console.log('📴 Sin conexión');
+      this.updateConnectionStatus('offline');
+      this.stopAutoSync();
     }
   }
 
-  // Guardar configuración en localStorage
-  saveConfig() {
-    localStorage.setItem('syncConfig', JSON.stringify(this.config));
-  }
-
-  // Manejar cuando el dispositivo se conecta
-  handleOnline() {
-    console.log('🌐 Dispositivo online');
-    this.isOnline = true;
-    this.updateConnectionStatus();
-    
-    // Intentar sincronizar inmediatamente
-    if (this.config.autoSync) {
-      setTimeout(() => this.syncPendingChanges(), 1000);
-    }
-    
-    // Reiniciar sincronización automática
-    this.startAutoSync();
-  }
-
-  // Manejar cuando el dispositivo se desconecta
-  handleOffline() {
-    console.log('📴 Dispositivo offline');
-    this.isOnline = false;
-    this.updateConnectionStatus();
-    
-    // Detener sincronización automática
-    this.stopAutoSync();
-  }
-
-  // Actualizar indicador de conexión en la UI
-  updateConnectionStatus() {
+  updateConnectionStatus(status = null) {
     const statusElement = document.getElementById('connection-status');
     if (!statusElement) return;
-
-    if (this.isOnline) {
-      statusElement.className = 'connection-status online';
-      statusElement.innerHTML = '<i class="bi bi-wifi"></i> Online';
-      statusElement.style.display = 'flex';
-      
-      // Ocultar después de 3 segundos
+    
+    const actualStatus = status || (this.isOnline ? 'online' : 'offline');
+    
+    statusElement.className = `connection-status ${actualStatus}`;
+    statusElement.innerHTML = `
+      <div class="status-indicator ${actualStatus}"></div>
+      <span>${actualStatus === 'online' ? 'En línea' : 'Sin conexión'}</span>
+      ${this.pendingChanges > 0 ? `<span class="pending-badge">${this.pendingChanges}</span>` : ''}
+    `;
+    
+    // Mostrar/ocultar según sea necesario
+    if (actualStatus === 'online' && this.pendingChanges === 0) {
       setTimeout(() => {
-        if (this.isOnline) {
-          statusElement.style.display = 'none';
+        if (this.isOnline && this.pendingChanges === 0) {
+          statusElement.style.opacity = '0';
+          setTimeout(() => {
+            if (statusElement.style.opacity === '0') {
+              statusElement.style.display = 'none';
+            }
+          }, 300);
         }
       }, 3000);
     } else {
-      statusElement.className = 'connection-status offline';
-      statusElement.innerHTML = '<i class="bi bi-wifi-off"></i> Offline';
       statusElement.style.display = 'flex';
+      statusElement.style.opacity = '1';
     }
   }
 
-  // Iniciar sincronización automática
+  async updatePendingCount() {
+    try {
+      const pendingItems = await localDB.getPendingSyncItems(100);
+      this.pendingChanges = pendingItems.length;
+      this.updateConnectionStatus();
+      return this.pendingChanges;
+    } catch (error) {
+      console.error('Error actualizando conteo pendiente:', error);
+      this.pendingChanges = 0;
+      return 0;
+    }
+  }
+
   startAutoSync() {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
     }
     
     this.syncInterval = setInterval(() => {
-      if (this.isOnline && this.config.autoSync && !this.isSyncing) {
-        this.syncPendingChanges();
+      if (this.isOnline && this.config.autoSync && !this.isSyncing && this.pendingChanges > 0) {
+        console.log('⏰ Sincronización automática iniciada');
+        this.sync();
       }
     }, this.config.syncInterval);
+    
+    console.log(`🔄 Sincronización automática configurada cada ${this.config.syncInterval/1000} segundos`);
   }
 
-  // Detener sincronización automática
   stopAutoSync() {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
@@ -121,212 +138,209 @@ class SyncManager {
     }
   }
 
-  // Sincronizar cambios pendientes
-  async syncPendingChanges() {
-    if (this.isSyncing || !this.isOnline) {
-      console.log('Sincronización en curso o dispositivo offline');
-      return;
-    }
-
-    this.isSyncing = true;
-    this.showSyncIndicator(true);
-
-    try {
-      console.log('🔄 Iniciando sincronización...');
-
-      // 1. Obtener cambios pendientes de la cola local
-      const pendingItems = await localDB.getPendingSyncItems(this.config.batchSize);
-      
-      if (pendingItems.length === 0) {
-        console.log('✅ No hay cambios pendientes para sincronizar');
-        this.lastSync = new Date().toISOString();
-        this.updateLastSyncTime();
-        return;
-      }
-
-      console.log(`📦 Sincronizando ${pendingItems.length} cambios pendientes...`);
-
-      // 2. Procesar cada item de sincronización
-      const results = {
-        success: [],
-        failed: [],
-        conflicts: []
+  async sync() {
+    if (this.isSyncing) {
+      console.log('⏳ Sincronización ya en curso');
+      return {
+        success: false,
+        error: 'Sincronización ya en curso'
       };
-
-      for (const item of pendingItems) {
-        try {
-          // Verificar si hay conflicto
-          const conflict = await this.checkForConflict(item);
-          
-          if (conflict.hasConflict) {
-            console.log(`⚠️ Conflicto detectado en ${item.table} (ID: ${item.record_id})`);
-            
-            // Manejar conflicto según la estrategia configurada
-            const resolvedItem = await this.resolveConflict(item, conflict);
-            
-            if (resolvedItem) {
-              item.data = resolvedItem;
-              conflict.resolved = true;
-            }
-            
-            results.conflicts.push({
-              item: item,
-              conflict: conflict
-            });
-
-            // Si no se pudo resolver, saltar este item
-            if (!conflict.resolved) {
-              await localDB.incrementSyncAttempts(item.id);
-              continue;
-            }
-          }
-
-          // 3. Ejecutar la operación en Supabase
-          const success = await this.executeSupabaseOperation(item);
-          
-          if (success) {
-            // 4. Marcar como procesado
-            await localDB.markSyncItemProcessed(item.id);
-            results.success.push(item);
-            
-            console.log(`✓ ${item.action} en ${item.table} (ID: ${item.record_id})`);
-          } else {
-            // Incrementar intentos
-            await localDB.incrementSyncAttempts(item.id);
-            results.failed.push(item);
-            
-            console.log(`✗ Error en ${item.action} en ${item.table} (ID: ${item.record_id})`);
-          }
-        } catch (error) {
-          console.error(`Error procesando item ${item.id}:`, error);
-          await localDB.incrementSyncAttempts(item.id);
-          results.failed.push({
-            item: item,
-            error: error.message
-          });
-        }
-      }
-
-      // 5. Descargar cambios desde Supabase (sincronización bidireccional)
-      if (supabaseManager.user) {
-        await this.pullChangesFromSupabase();
-      }
-
-      // 6. Actualizar estado
-      this.lastSync = new Date().toISOString();
-      this.retryCount = 0;
+    }
+    
+    if (!this.isOnline) {
+      console.log('📴 No hay conexión para sincronizar');
+      return {
+        success: false,
+        error: 'Sin conexión a internet'
+      };
+    }
+    
+    this.isSyncing = true;
+    this.status = 'syncing';
+    this.retryCount = 0;
+    
+    // Mostrar indicador
+    this.showSyncIndicator(true);
+    
+    console.log('🔄 Iniciando sincronización...');
+    
+    try {
+      // 1. Sincronizar cambios locales con Supabase
+      const syncResult = await this.syncLocalToRemote();
       
-      // 7. Mostrar resultados
-      this.showSyncResults(results);
-
-      console.log(`✅ Sincronización completada: ${results.success.length} exitosos, ${results.failed.length} fallidos, ${results.conflicts.length} conflictos`);
-
+      // 2. Si la sincronización fue exitosa, descargar cambios remotos
+      if (syncResult.success && syncResult.synced > 0) {
+        await this.syncRemoteToLocal();
+      }
+      
+      // 3. Actualizar estado
+      this.lastSync = new Date().toISOString();
+      localStorage.setItem('lastSync', this.lastSync);
+      
+      // 4. Limpiar items antiguos
+      await localDB.cleanupOldSyncItems();
+      
+      // 5. Actualizar conteo pendiente
+      await this.updatePendingCount();
+      
+      this.status = 'success';
+      this.lastError = null;
+      
+      console.log(`✅ Sincronización completada: ${syncResult.synced || 0} cambios`);
+      
+      // Mostrar notificación
+      this.showSyncNotification(syncResult);
+      
+      return {
+        success: true,
+        ...syncResult,
+        timestamp: this.lastSync
+      };
+      
     } catch (error) {
       console.error('❌ Error en sincronización:', error);
+      
+      this.status = 'error';
+      this.lastError = error.message;
       this.retryCount++;
       
       // Reintentar si no excede el máximo
       if (this.retryCount <= this.maxRetries) {
-        console.log(`Reintentando en 5 segundos... (${this.retryCount}/${this.maxRetries})`);
-        setTimeout(() => this.syncPendingChanges(), 5000);
+        console.log(`↻ Reintentando en 5 segundos... (${this.retryCount}/${this.maxRetries})`);
+        
+        setTimeout(() => {
+          if (this.isOnline) {
+            this.sync();
+          }
+        }, 5000);
       } else {
         this.showSyncError('Error de sincronización. Revise su conexión.');
       }
+      
+      return {
+        success: false,
+        error: error.message,
+        retryCount: this.retryCount
+      };
+      
     } finally {
       this.isSyncing = false;
       this.showSyncIndicator(false);
-      
-      // Limpiar items antiguos procesados
-      await localDB.cleanupOldSyncItems();
     }
   }
 
-  // Verificar si hay conflicto con datos en Supabase
-  async checkForConflict(syncItem) {
-    // Solo verificar conflictos para UPDATE
-    if (syncItem.action !== 'UPDATE') {
-      return { hasConflict: false };
-    }
-
+  async syncLocalToRemote() {
+    console.log('📤 Sincronizando cambios locales con remoto...');
+    
     try {
-      // Obtener versión actual en Supabase
-      const { data: remoteData, error } = await supabaseManager.supabase
-        .from(syncItem.table)
-        .select('*')
-        .eq('id', syncItem.record_id)
-        .single();
-
-      if (error || !remoteData) {
-        return { hasConflict: false };
+      // Usar el método de syncData de SupabaseManager
+      const result = await supabaseManager.syncData();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Error desconocido en sincronización');
       }
-
-      // Comparar fechas de modificación
-      const localUpdate = new Date(syncItem.data.fecha_actualizacion || syncItem.data.updated_at);
-      const remoteUpdate = new Date(remoteData.fecha_actualizacion || remoteData.updated_at);
-
-      // Si el dato remoto es más reciente, hay conflicto
-      if (remoteUpdate > localUpdate) {
-        return {
-          hasConflict: true,
-          localData: syncItem.data,
-          remoteData: remoteData,
-          localTimestamp: localUpdate,
-          remoteTimestamp: remoteUpdate,
-          resolved: false
-        };
-      }
-
-      return { hasConflict: false };
+      
+      return {
+        success: true,
+        synced: result.synced || 0,
+        errors: result.errors || 0
+      };
+      
     } catch (error) {
-      console.error('Error verificando conflicto:', error);
-      return { hasConflict: false };
+      console.error('Error sincronizando local a remoto:', error);
+      throw error;
     }
   }
 
-  // Resolver conflicto según estrategia configurada
-  async resolveConflict(syncItem, conflict) {
-    switch (this.config.conflictStrategy) {
+  async syncRemoteToLocal() {
+    console.log('📥 Descargando cambios desde remoto...');
+    
+    if (!supabaseManager.user) {
+      console.log('⚠️ Usuario no autenticado, omitiendo descarga');
+      return;
+    }
+    
+    try {
+      // 1. Obtener perfil actualizado
+      await supabaseManager.loadProfile();
+      
+      // 2. Obtener empresas actualizadas
+      const empresas = await supabaseManager.getEmpresas();
+      
+      // 3. Para cada empresa, obtener contratos, certificaciones, etc.
+      for (const empresa of empresas) {
+        // Aquí iría la lógica para descargar datos relacionados
+        // Por ahora solo actualizamos la empresa
+        await localDB.update('empresas', empresa);
+      }
+      
+      console.log(`✅ Descargadas ${empresas.length} empresas`);
+      
+    } catch (error) {
+      console.error('Error descargando cambios remotos:', error);
+      // No lanzamos error para no interrumpir la sincronización principal
+    }
+  }
+
+  async checkForConflicts(localItem, remoteData) {
+    // Implementación básica de detección de conflictos
+    const localDate = new Date(localItem.data.fecha_actualizacion || localItem.fecha_creacion);
+    const remoteDate = new Date(remoteData.fecha_actualizacion || remoteData.fecha_creacion);
+    
+    if (remoteDate > localDate) {
+      return {
+        hasConflict: true,
+        localData: localItem.data,
+        remoteData: remoteData,
+        localTimestamp: localDate,
+        remoteTimestamp: remoteDate,
+        resolved: false
+      };
+    }
+    
+    return { hasConflict: false };
+  }
+
+  async resolveConflict(conflict, strategy = null) {
+    const useStrategy = strategy || this.config.conflictStrategy;
+    
+    switch (useStrategy) {
       case 'last-write-wins':
-        // Usar el dato más reciente
+        // Usar el más reciente
         if (conflict.remoteTimestamp > conflict.localTimestamp) {
-          console.log('Usando datos del servidor (más recientes)');
+          console.log('🔄 Usando datos remotos (más recientes)');
           return conflict.remoteData;
         } else {
-          console.log('Usando datos locales (más recientes)');
-          return syncItem.data;
+          console.log('🔄 Usando datos locales (más recientes)');
+          return conflict.localData;
         }
-
-      case 'server-wins':
-        // Siempre usar datos del servidor
-        console.log('Usando datos del servidor (server-wins)');
-        return conflict.remoteData;
-
-      case 'manual':
-        // Dejar que el usuario decida (implementar UI)
-        console.log('Conflicto requiere resolución manual');
         
-        // Guardar conflicto para resolución manual
-        await this.saveManualConflict(syncItem, conflict);
+      case 'server-wins':
+        console.log('🔄 Usando datos del servidor (server-wins)');
+        return conflict.remoteData;
+        
+      case 'manual':
+        console.log('🔄 Conflicto requiere resolución manual');
+        await this.saveManualConflict(conflict);
         return null;
-
+        
       default:
-        console.log('Usando estrategia por defecto (last-write-wins)');
+        console.log('🔄 Usando estrategia por defecto (last-write-wins)');
         if (conflict.remoteTimestamp > conflict.localTimestamp) {
           return conflict.remoteData;
         } else {
-          return syncItem.data;
+          return conflict.localData;
         }
     }
   }
 
-  // Guardar conflicto para resolución manual
-  async saveManualConflict(syncItem, conflict) {
+  async saveManualConflict(conflict) {
+    // Guardar conflicto para resolución manual
     const conflictData = {
       id: `conflict_${Date.now()}`,
-      sync_item_id: syncItem.id,
-      table: syncItem.table,
-      record_id: syncItem.record_id,
-      local_data: syncItem.data,
+      table: conflict.table,
+      record_id: conflict.record_id,
+      local_data: conflict.localData,
       remote_data: conflict.remoteData,
       local_timestamp: conflict.localTimestamp,
       remote_timestamp: conflict.remoteTimestamp,
@@ -336,370 +350,563 @@ class SyncManager {
 
     await localDB.add('conflictos', conflictData);
     
-    // Mostrar notificación al usuario
-    this.showConflictNotification(syncItem, conflict);
+    // Mostrar notificación
+    this.showConflictNotification(conflictData);
   }
 
-  // Ejecutar operación en Supabase
-  async executeSupabaseOperation(syncItem) {
-    try {
-      let result;
-
-      switch (syncItem.action) {
-        case 'INSERT':
-          result = await supabaseManager.supabase
-            .from(syncItem.table)
-            .insert([syncItem.data]);
-          break;
-
-        case 'UPDATE':
-          result = await supabaseManager.supabase
-            .from(syncItem.table)
-            .update(syncItem.data)
-            .eq('id', syncItem.record_id);
-          break;
-
-        case 'DELETE':
-          result = await supabaseManager.supabase
-            .from(syncItem.table)
-            .delete()
-            .eq('id', syncItem.record_id);
-          break;
-
-        default:
-          throw new Error(`Acción no soportada: ${syncItem.action}`);
-      }
-
-      if (result.error) {
-        console.error(`Error en operación ${syncItem.action}:`, result.error);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error(`Error ejecutando operación ${syncItem.action}:`, error);
-      return false;
-    }
-  }
-
-  // Descargar cambios desde Supabase
-  async pullChangesFromSupabase() {
-    if (!supabaseManager.user) return;
-
-    try {
-      console.log('⬇️ Descargando cambios desde Supabase...');
-
-      // Obtener fecha de última sincronización
-      const lastSync = this.lastSync || localStorage.getItem('lastSuccessfulSync');
-      
-      // Descargar datos del usuario
-      const remoteData = await supabaseManager.downloadUserData();
-      
-      if (!remoteData) {
-        console.log('No hay datos remotos para descargar');
-        return;
-      }
-
-      // Sincronizar datos descargados con la base de datos local
-      await this.mergeRemoteData(remoteData);
-
-      console.log('✅ Cambios descargados desde Supabase');
-
-    } catch (error) {
-      console.error('Error descargando cambios:', error);
-    }
-  }
-
-  // Fusionar datos remotos con locales
-  async mergeRemoteData(remoteData) {
-    // Para cada tabla, actualizar o insertar registros
-    const tables = ['empresas', 'contratos', 'suplementos', 'certificaciones', 'pagos', 'pagos_distribucion'];
-    
-    for (const table of tables) {
-      if (remoteData[table] && remoteData[table].length > 0) {
-        console.log(`🔄 Fusionando ${remoteData[table].length} registros de ${table}...`);
-        
-        for (const remoteRecord of remoteData[table]) {
-          try {
-            // Verificar si existe localmente
-            const localRecord = await localDB.get(table, remoteRecord.id);
-            
-            if (localRecord) {
-              // Comparar fechas para determinar cuál es más reciente
-              const localDate = new Date(localRecord.fecha_actualizacion || localRecord.updated_at);
-              const remoteDate = new Date(remoteRecord.fecha_actualizacion || remoteRecord.updated_at);
-              
-              if (remoteDate > localDate) {
-                // El remoto es más reciente, actualizar local
-                await localDB.update(table, remoteRecord);
-              }
-            } else {
-              // No existe localmente, insertar
-              await localDB.add(table, remoteRecord);
-            }
-          } catch (error) {
-            console.error(`Error fusionando registro en ${table}:`, error);
-          }
-        }
-      }
-    }
-  }
-
-  // Mostrar indicador de sincronización
   showSyncIndicator(show) {
     const indicator = document.getElementById('sync-indicator');
     if (!indicator) return;
-
+    
     if (show) {
-      indicator.style.display = 'block';
+      indicator.style.display = 'flex';
       indicator.innerHTML = `
-        <div class="sync-indicator-content">
-          <div class="spinner-small"></div>
-          <span>Sincronizando...</span>
-        </div>
+        <div class="sync-spinner"></div>
+        <span>Sincronizando cambios...</span>
       `;
     } else {
       indicator.style.display = 'none';
     }
   }
 
-  // Mostrar resultados de sincronización
-  showSyncResults(results) {
-    const total = results.success.length + results.failed.length + results.conflicts.length;
-    
-    if (total === 0) return;
-
-    // Crear notificación toast
-    const toast = document.createElement('div');
-    toast.className = `toast fade-in ${results.failed.length > 0 ? 'toast-warning' : 'toast-success'}`;
-    toast.innerHTML = `
-      <div class="toast-header">
-        <i class="bi bi-arrow-repeat me-2"></i>
-        <strong class="me-auto">Sincronización completada</strong>
-        <small>${new Date().toLocaleTimeString()}</small>
-        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
-      </div>
-      <div class="toast-body">
-        <p>✅ ${results.success.length} exitosos</p>
-        ${results.failed.length > 0 ? `<p>❌ ${results.failed.length} fallidos</p>` : ''}
-        ${results.conflicts.length > 0 ? `<p>⚠️ ${results.conflicts.length} conflictos</p>` : ''}
-        ${results.failed.length > 0 ? 
-          '<p class="small text-muted">Los cambios fallados se reintentarán automáticamente.</p>' : ''}
-      </div>
-    `;
-
+  showSyncNotification(result) {
     const container = document.getElementById('toasts-container');
-    if (container) {
-      container.appendChild(toast);
-      
-      // Auto-eliminar después de 5 segundos
-      setTimeout(() => {
-        if (toast.parentNode) {
-          toast.remove();
-        }
-      }, 5000);
-    }
-
-    // Actualizar tiempo de última sincronización
-    this.updateLastSyncTime();
-  }
-
-  // Mostrar error de sincronización
-  showSyncError(message) {
+    if (!container) return;
+    
     const toast = document.createElement('div');
-    toast.className = 'toast fade-in toast-error';
+    toast.className = 'toast toast-success fade-in';
+    
+    let message = 'Sincronización completada';
+    if (result.synced > 0) {
+      message += ` - ${result.synced} cambios sincronizados`;
+    }
+    if (result.errors > 0) {
+      message += ` (${result.errors} errores)`;
+    }
+    
     toast.innerHTML = `
       <div class="toast-header">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        <strong class="me-auto">Error de sincronización</strong>
-        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        <i class="icon icon-check-circle"></i>
+        <strong>Sincronización</strong>
+        <small>${new Date().toLocaleTimeString()}</small>
+        <button class="toast-close">&times;</button>
       </div>
       <div class="toast-body">
         <p>${message}</p>
-        <p class="small">Los cambios se guardaron localmente y se sincronizarán cuando se restablezca la conexión.</p>
+        ${result.errors > 0 ? 
+          '<p class="small">Los cambios con errores se reintentarán automáticamente.</p>' : ''}
       </div>
     `;
-
-    const container = document.getElementById('toasts-container');
-    if (container) {
-      container.appendChild(toast);
-      
-      setTimeout(() => {
-        if (toast.parentNode) {
-          toast.remove();
-        }
-      }, 8000);
-    }
+    
+    container.appendChild(toast);
+    
+    // Configurar botón de cierre
+    toast.querySelector('.toast-close').onclick = () => toast.remove();
+    
+    // Auto-eliminar después de 5 segundos
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.remove();
+      }
+    }, 5000);
   }
 
-  // Mostrar notificación de conflicto
-  showConflictNotification(syncItem, conflict) {
+  showSyncError(message) {
+    const container = document.getElementById('toasts-container');
+    if (!container) return;
+    
     const toast = document.createElement('div');
-    toast.className = 'toast fade-in toast-warning';
+    toast.className = 'toast toast-error fade-in';
+    
     toast.innerHTML = `
       <div class="toast-header">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        <strong class="me-auto">Conflicto detectado</strong>
-        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        <i class="icon icon-x-circle"></i>
+        <strong>Error de sincronización</strong>
+        <button class="toast-close">&times;</button>
       </div>
       <div class="toast-body">
-        <p>Hay un conflicto en ${syncItem.table} (ID: ${syncItem.record_id})</p>
+        <p>${message}</p>
+        <p class="small">Los cambios se guardaron localmente.</p>
+      </div>
+    `;
+    
+    container.appendChild(toast);
+    
+    toast.querySelector('.toast-close').onclick = () => toast.remove();
+    
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.remove();
+      }
+    }, 8000);
+  }
+
+  showConflictNotification(conflict) {
+    const container = document.getElementById('toasts-container');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-warning fade-in';
+    
+    toast.innerHTML = `
+      <div class="toast-header">
+        <i class="icon icon-alert-triangle"></i>
+        <strong>Conflicto detectado</strong>
+        <button class="toast-close">&times;</button>
+      </div>
+      <div class="toast-body">
+        <p>Hay un conflicto en ${conflict.table}</p>
         <p class="small">Los datos fueron modificados tanto localmente como en el servidor.</p>
         <div class="mt-2">
-          <button class="btn btn-sm btn-primary me-2" onclick="syncManager.resolveConflictNow('${syncItem.id}')">
-            Resolver ahora
-          </button>
-          <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="toast">
-            Más tarde
-          </button>
+          <button class="btn-resolve btn-sm">Resolver ahora</button>
+          <button class="toast-close btn-sm ml-2">Más tarde</button>
         </div>
       </div>
     `;
-
-    const container = document.getElementById('toasts-container');
-    if (container) {
-      container.appendChild(toast);
-    }
+    
+    container.appendChild(toast);
+    
+    // Configurar botones
+    toast.querySelector('.toast-close').onclick = () => toast.remove();
+    toast.querySelector('.btn-resolve').onclick = () => {
+      this.openConflictResolver(conflict);
+      toast.remove();
+    };
   }
 
-  // Actualizar tiempo de última sincronización en la UI
-  updateLastSyncTime() {
-    const lastSyncElement = document.getElementById('last-sync-time');
-    if (!lastSyncElement || !this.lastSync) return;
-
-    const lastSyncDate = new Date(this.lastSync);
-    const now = new Date();
-    const diffMinutes = Math.floor((now - lastSyncDate) / (1000 * 60));
-
-    let timeText;
-    if (diffMinutes < 1) {
-      timeText = 'Hace unos segundos';
-    } else if (diffMinutes < 60) {
-      timeText = `Hace ${diffMinutes} minuto${diffMinutes > 1 ? 's' : ''}`;
-    } else if (diffMinutes < 1440) {
-      const hours = Math.floor(diffMinutes / 60);
-      timeText = `Hace ${hours} hora${hours > 1 ? 's' : ''}`;
-    } else {
-      timeText = lastSyncDate.toLocaleDateString();
-    }
-
-    lastSyncElement.textContent = `Última sincronización: ${timeText}`;
-    lastSyncElement.title = `Sincronizado el: ${lastSyncDate.toLocaleString()}`;
+  openConflictResolver(conflict) {
+    // Implementar interfaz de resolución de conflictos
+    console.log('Abriendo resolvedor de conflictos para:', conflict);
+    // En una implementación completa, esto abriría un modal
   }
 
-  // Sincronizar manualmente
-  async syncNow() {
+  async forceSync() {
+    console.log('🚀 Forzando sincronización completa...');
+    
     if (!this.isOnline) {
-      this.showToast('No hay conexión a internet', 'error');
-      return;
-    }
-
-    if (this.isSyncing) {
-      this.showToast('Sincronización en curso...', 'info');
-      return;
-    }
-
-    this.showToast('Iniciando sincronización manual...', 'info');
-    await this.syncPendingChanges();
-  }
-
-  // Forzar sincronización completa
-  async forceFullSync() {
-    if (!this.isOnline) {
+      this.showSyncError('No hay conexión a internet');
       throw new Error('No hay conexión a internet');
     }
-
-    console.log('🔄 Forzando sincronización completa...');
     
-    // 1. Subir todos los datos locales
-    const localData = await localDB.exportToJSON();
-    const uploadResult = await supabaseManager.syncLocalData(localData);
+    // 1. Sincronizar todos los cambios locales
+    const syncResult = await this.syncLocalToRemote();
     
-    if (!uploadResult.success) {
-      throw new Error('Error al subir datos locales');
+    if (!syncResult.success) {
+      throw new Error(syncResult.error);
     }
-
+    
     // 2. Descargar todos los datos remotos
-    await this.pullChangesFromSupabase();
-
-    // 3. Limpiar cola de sincronización
-    const pendingItems = await localDB.getPendingSyncItems(1000);
-    for (const item of pendingItems) {
-      await localDB.markSyncItemProcessed(item.id);
+    await this.syncRemoteToLocal();
+    
+    // 3. Limpiar caché si es necesario
+    if ('caches' in window) {
+      try {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(cacheName => caches.delete(cacheName))
+        );
+        console.log('🧹 Caché limpiada');
+      } catch (error) {
+        console.warn('Error limpiando caché:', error);
+      }
     }
-
-    console.log('✅ Sincronización completa finalizada');
-    this.showToast('Sincronización completa completada', 'success');
+    
+    console.log('✅ Sincronización forzada completada');
+    
+    return {
+      success: true,
+      message: 'Sincronización completa completada',
+      synced: syncResult.synced || 0
+    };
   }
 
-  // Mostrar toast genérico
-  showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    const typeClass = {
-      'success': 'toast-success',
-      'error': 'toast-error',
-      'warning': 'toast-warning',
-      'info': 'toast-info'
-    }[type] || 'toast-info';
-
-    const icon = {
-      'success': 'bi-check-circle',
-      'error': 'bi-exclamation-triangle',
-      'warning': 'bi-exclamation-circle',
-      'info': 'bi-info-circle'
-    }[type] || 'bi-info-circle';
-
-    toast.className = `toast fade-in ${typeClass}`;
-    toast.innerHTML = `
-      <div class="toast-header">
-        <i class="bi ${icon} me-2"></i>
-        <strong class="me-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
-        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
-      </div>
-      <div class="toast-body">
-        ${message}
-      </div>
-    `;
-
-    const container = document.getElementById('toasts-container');
-    if (container) {
-      container.appendChild(toast);
-      
-      setTimeout(() => {
-        if (toast.parentNode) {
-          toast.remove();
-        }
-      }, 3000);
-    }
-  }
-
-  // Obtener estado de sincronización
-  getSyncStatus() {
+  getStatus() {
     return {
       isOnline: this.isOnline,
       isSyncing: this.isSyncing,
+      status: this.status,
       lastSync: this.lastSync,
+      pendingChanges: this.pendingChanges,
+      lastError: this.lastError,
       config: this.config,
       retryCount: this.retryCount
     };
   }
 
-  // Actualizar configuración
   updateConfig(newConfig) {
     this.config = { ...this.config, ...newConfig };
-    this.saveConfig();
     
-    // Reiniciar sincronización automática si la configuración cambió
+    // Guardar en localStorage
+    localStorage.setItem('autoSync', this.config.autoSync);
+    localStorage.setItem('syncInterval', this.config.syncInterval);
+    localStorage.setItem('conflictStrategy', this.config.conflictStrategy);
+    
+    // Reiniciar sincronización automática si es necesario
     if (this.config.autoSync && this.isOnline) {
       this.startAutoSync();
     } else {
       this.stopAutoSync();
     }
+    
+    return this.config;
+  }
+
+  async getSyncStats() {
+    try {
+      const pendingItems = await localDB.getPendingSyncItems(1000);
+      const allItems = await localDB.getAll('sync_queue');
+      
+      const stats = {
+        pending: pendingItems.length,
+        total: allItems.length,
+        byStatus: {},
+        byTable: {},
+        lastWeek: 0
+      };
+      
+      // Contar por estado
+      allItems.forEach(item => {
+        const status = item.estado || 'unknown';
+        stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
+        
+        const table = item.table || 'unknown';
+        stats.byTable[table] = (stats.byTable[table] || 0) + 1;
+        
+        // Contar items de la última semana
+        const itemDate = new Date(item.fecha_creacion);
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        
+        if (itemDate > weekAgo) {
+          stats.lastWeek++;
+        }
+      });
+      
+      return stats;
+    } catch (error) {
+      console.error('Error obteniendo estadísticas de sincronización:', error);
+      return null;
+    }
+  }
+
+  // Métodos de utilidad para la aplicación
+  async addChangeForSync(table, action, data) {
+    const recordId = data.id || `temp_${Date.now()}`;
+    
+    const syncItem = {
+      table,
+      action,
+      record_id: recordId,
+      data,
+      estado: 'pendiente',
+      intentos: 0,
+      fecha_creacion: new Date().toISOString(),
+      fecha_actualizacion: new Date().toISOString()
+    };
+    
+    try {
+      await localDB.add('sync_queue', syncItem);
+      await this.updatePendingCount();
+      
+      // Si estamos online y la sincronización automática está activada, sincronizar inmediatamente
+      if (this.isOnline && this.config.autoSync && !this.isSyncing) {
+        setTimeout(() => this.sync(), 1000);
+      }
+      
+      return {
+        success: true,
+        syncId: syncItem.id,
+        message: 'Cambio agregado a la cola de sincronización'
+      };
+    } catch (error) {
+      console.error('Error agregando cambio a la cola:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async clearSyncQueue() {
+    try {
+      const allItems = await localDB.getAll('sync_queue');
+      let deletedCount = 0;
+      
+      for (const item of allItems) {
+        if (item.estado === 'completado' || item.estado === 'error') {
+          await localDB.delete('sync_queue', item.id);
+          deletedCount++;
+        }
+      }
+      
+      await this.updatePendingCount();
+      
+      return {
+        success: true,
+        deleted: deletedCount,
+        message: `Cola limpiada: ${deletedCount} items eliminados`
+      };
+    } catch (error) {
+      console.error('Error limpiando cola de sincronización:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   }
 }
 
-// Exportar instancia única
+// Crear instancia única
 const syncManager = new SyncManager();
+
+// Hacer disponible globalmente
 window.syncManager = syncManager;
 
+// Exportar
 export { syncManager };
+
+// Inicializar cuando se carga la página
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('📡 Sync Manager listo');
+  
+  // Agregar estilos para los indicadores
+  const styles = `
+    .connection-status {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+    }
+    
+    .connection-status.online {
+      background: rgba(34, 197, 94, 0.9);
+      color: white;
+    }
+    
+    .connection-status.offline {
+      background: rgba(239, 68, 68, 0.9);
+      color: white;
+    }
+    
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    
+    .status-indicator.online {
+      background: #22c55e;
+      box-shadow: 0 0 10px #22c55e;
+    }
+    
+    .status-indicator.offline {
+      background: #ef4444;
+      box-shadow: 0 0 10px #ef4444;
+    }
+    
+    .pending-badge {
+      background: white;
+      color: #3b82f6;
+      font-size: 12px;
+      font-weight: bold;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 4px;
+    }
+    
+    .sync-indicator {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      background: rgba(59, 130, 246, 0.9);
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      backdrop-filter: blur(10px);
+    }
+    
+    .sync-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .toast {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+      margin-bottom: 10px;
+      max-width: 350px;
+      overflow: hidden;
+      animation: slideInRight 0.3s ease;
+    }
+    
+    .toast-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      gap: 8px;
+    }
+    
+    .toast-header i {
+      font-size: 16px;
+    }
+    
+    .toast-header strong {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .toast-header small {
+      color: #64748b;
+      font-size: 12px;
+    }
+    
+    .toast-close {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 18px;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+    
+    .toast-close:hover {
+      background: #f1f5f9;
+    }
+    
+    .toast-body {
+      padding: 16px;
+      font-size: 14px;
+      color: #475569;
+    }
+    
+    .toast-body .small {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+    
+    .toast-success .toast-header {
+      background: #22c55e;
+      color: white;
+      border-bottom-color: #16a34a;
+    }
+    
+    .toast-error .toast-header {
+      background: #ef4444;
+      color: white;
+      border-bottom-color: #dc2626;
+    }
+    
+    .toast-warning .toast-header {
+      background: #f59e0b;
+      color: white;
+      border-bottom-color: #d97706;
+    }
+    
+    .btn-resolve {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    
+    .btn-resolve:hover {
+      background: #2563eb;
+    }
+    
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .fade-in {
+      animation: fadeIn 0.3s ease;
+    }
+  `;
+  
+  const styleSheet = document.createElement('style');
+  styleSheet.textContent = styles;
+  document.head.appendChild(styleSheet);
+  
+  // Crear elementos DOM si no existen
+  if (!document.getElementById('connection-status')) {
+    const connectionStatus = document.createElement('div');
+    connectionStatus.id = 'connection-status';
+    connectionStatus.className = 'connection-status';
+    document.body.appendChild(connectionStatus);
+  }
+  
+  if (!document.getElementById('sync-indicator')) {
+    const syncIndicator = document.createElement('div');
+    syncIndicator.id = 'sync-indicator';
+    syncIndicator.className = 'sync-indicator';
+    document.body.appendChild(syncIndicator);
+  }
+  
+  if (!document.getElementById('toasts-container')) {
+    const toastsContainer = document.createElement('div');
+    toastsContainer.id = 'toasts-container';
+    toastsContainer.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      max-width: 350px;
+    `;
+    document.body.appendChild(toastsContainer);
+  }
+});
