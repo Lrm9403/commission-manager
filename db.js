@@ -3,7 +3,7 @@ class LocalDatabase {
   constructor() {
     this.db = null;
     this.dbName = 'CommissionManagerDB';
-    this.dbVersion = 3; // Versión incrementada para forzar actualización
+    this.dbVersion = 4; // Versión incrementada para forzar actualización
     this.initPromise = null;
   }
 
@@ -33,9 +33,9 @@ class LocalDatabase {
         // Tabla de usuarios
         if (!db.objectStoreNames.contains('usuarios')) {
           const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
-          userStore.createIndex('auth_id', 'auth_id', { unique: true });
-          userStore.createIndex('email', 'email', { unique: true });
-          userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: true });
+          userStore.createIndex('auth_id', 'auth_id', { unique: false }); // Cambiado a unique: false
+          userStore.createIndex('email', 'email', { unique: false }); // Cambiado a unique: false
+          userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false }); // Cambiado a unique: false
         }
 
         // Tabla de empresas
@@ -50,7 +50,7 @@ class LocalDatabase {
         if (!db.objectStoreNames.contains('contratos')) {
           const contractStore = db.createObjectStore('contratos', { keyPath: 'id' });
           contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
-          contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: true });
+          contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false }); // Cambiado a unique: false
           contractStore.createIndex('estado', 'estado', { unique: false });
           contractStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
         }
@@ -67,7 +67,7 @@ class LocalDatabase {
           const certificationStore = db.createObjectStore('certificaciones', { keyPath: 'id' });
           certificationStore.createIndex('contrato_id', 'contrato_id', { unique: false });
           certificationStore.createIndex('mes', 'mes', { unique: false });
-          certificationStore.createIndex('contrato_mes', ['contrato_id', 'mes'], { unique: true });
+          certificationStore.createIndex('contrato_mes', ['contrato_id', 'mes'], { unique: false }); // Cambiado a unique: false
           certificationStore.createIndex('pagado', 'pagado', { unique: false });
         }
 
@@ -86,13 +86,12 @@ class LocalDatabase {
           distributionStore.createIndex('contrato_id', 'contrato_id', { unique: false });
         }
 
-        // ✅ TABLA DE SINCRONIZACIÓN CORREGIDA - SIN ÍNDICE CON BOOLEAN
+        // ✅ TABLA DE SINCRONIZACIÓN CORREGIDA
         if (!db.objectStoreNames.contains('sync_queue')) {
           const syncStore = db.createObjectStore('sync_queue', { 
             keyPath: 'id',
             autoIncrement: true 
           });
-          // Índice corregido: usar string en lugar de boolean
           syncStore.createIndex('estado', 'estado', { unique: false });
           syncStore.createIndex('tabla', 'tabla', { unique: false });
           syncStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
