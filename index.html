@@ -1,0 +1,2331 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commission Manager Pro</title>
+    <meta name="description" content="Gestión profesional de comisiones con sincronización online/offline">
+    <meta name="theme-color" content="#3b82f6">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💼</text></svg>">
+    
+    <style>
+        /* Estilos iniciales para prevenir FOUC */
+        body:not(.loaded) {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        body.loaded {
+            opacity: 1;
+        }
+        
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--gray-50);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .loading-screen h1 {
+            font-size: 1.5rem;
+            color: var(--gray-700);
+            margin-bottom: 0.5rem;
+        }
+        
+        .loading-screen p {
+            color: var(--gray-500);
+            font-size: 0.875rem;
+        }
+        
+        /* Utilidades específicas para la app */
+        .money-input {
+            font-family: monospace;
+            text-align: right;
+            direction: ltr;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .status-active {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .status-pending {
+            background-color: var(--warning);
+            color: var(--gray-800);
+        }
+        
+        .status-completed {
+            background-color: var(--info);
+            color: white;
+        }
+        
+        .status-cancelled {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        .status-inactive {
+            background-color: var(--gray-400);
+            color: white;
+        }
+        
+        .company-logo {
+            width: 3rem;
+            height: 3rem;
+            border-radius: var(--border-radius);
+            object-fit: cover;
+            border: 2px solid var(--gray-200);
+        }
+        
+        .company-logo-sm {
+            width: 2rem;
+            height: 2rem;
+        }
+        
+        .company-logo-lg {
+            width: 4rem;
+            height: 4rem;
+        }
+        
+        .certification-month {
+            font-weight: 600;
+            color: var(--primary-600);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .payment-method {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            background-color: var(--gray-100);
+            border-radius: var(--border-radius);
+            font-size: 0.75rem;
+        }
+        
+        .contract-progress {
+            height: 0.5rem;
+            background-color: var(--gray-200);
+            border-radius: 9999px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+        
+        .contract-progress-bar {
+            height: 100%;
+            background: var(--primary-gradient);
+            border-radius: 9999px;
+        }
+        
+        .export-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background-color: var(--gray-100);
+            border: 1px solid var(--gray-300);
+            border-radius: var(--border-radius);
+            color: var(--gray-700);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: all var(--transition-fast);
+        }
+        
+        .export-btn:hover {
+            background-color: var(--gray-200);
+            transform: translateY(-1px);
+        }
+        
+        .filter-container {
+            background-color: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .data-table-container {
+            background-color: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--gray-500);
+        }
+        
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+        
+        .dashboard-widget {
+            background-color: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius-lg);
+            padding: 1.5rem;
+            height: 100%;
+        }
+        
+        .dashboard-widget-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+        
+        .notification-badge {
+            position: absolute;
+            top: -0.25rem;
+            right: -0.25rem;
+            width: 1rem;
+            height: 1rem;
+            background-color: var(--danger);
+            color: white;
+            border-radius: 50%;
+            font-size: 0.625rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .user-menu {
+            position: relative;
+        }
+        
+        .user-menu-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-lg);
+            min-width: 12rem;
+            z-index: 100;
+            display: none;
+        }
+        
+        .user-menu:hover .user-menu-dropdown {
+            display: block;
+        }
+        
+        .user-menu-item {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--gray-700);
+            text-decoration: none;
+            transition: background-color var(--transition-fast);
+        }
+        
+        .user-menu-item:hover {
+            background-color: var(--gray-50);
+            color: var(--primary-600);
+        }
+        
+        .user-menu-divider {
+            height: 1px;
+            background-color: var(--gray-200);
+            margin: 0.25rem 0;
+        }
+        
+        /* Responsive utilities */
+        @media (max-width: 640px) {
+            .hidden-sm {
+                display: none;
+            }
+            
+            .stack-sm {
+                flex-direction: column;
+            }
+            
+            .full-width-sm {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .hidden-md {
+                display: none;
+            }
+            
+            .stack-md {
+                flex-direction: column;
+            }
+            
+            .full-width-md {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 1024px) {
+            .hidden-lg {
+                display: none;
+            }
+            
+            .stack-lg {
+                flex-direction: column;
+            }
+            
+            .full-width-lg {
+                width: 100%;
+            }
+        }
+        
+        /* Print styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            
+            .print-full-width {
+                width: 100% !important;
+            }
+            
+            .print-break-after {
+                page-break-after: always;
+            }
+            
+            .print-break-before {
+                page-break-before: always;
+            }
+            
+            .print-break-inside {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Pantalla de carga inicial -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="spinner"></div>
+        <h1>Commission Manager Pro</h1>
+        <p id="loading-message">Inicializando aplicación...</p>
+    </div>
+    
+    <!-- Contenedor principal de la aplicación -->
+    <div id="app" style="display: none;"></div>
+    
+    <!-- Contenedor para notificaciones toast -->
+    <div id="toasts-container" class="toast-container"></div>
+    
+    <!-- Estado de conexión -->
+    <div id="connection-status" class="connection-status"></div>
+    
+    <!-- Indicador de sincronización -->
+    <div id="sync-indicator" class="sync-indicator"></div>
+    
+    <!-- Scripts de la aplicación -->
+    <script type="module">
+        // Importar módulos
+        import { localDB } from './db.js';
+        import { supabaseManager } from './supabase.js';
+        import { syncManager } from './sync.js';
+        
+        // Hacer disponibles globalmente para depuración
+        window.localDB = localDB;
+        window.supabaseManager = supabaseManager;
+        window.syncManager = syncManager;
+        
+        // Aplicación principal
+        class CommissionManagerApp {
+            constructor() {
+                this.currentUser = null;
+                this.currentCompany = null;
+                this.currentView = 'dashboard';
+                this.theme = localStorage.getItem('theme') || 'light';
+                this.currency = localStorage.getItem('currency') || 'USD';
+                this.isInitialized = false;
+            }
+            
+            // Inicializar aplicación
+            async init() {
+                console.log('🚀 Commission Manager Pro - Inicializando');
+                
+                try {
+                    // 1. Inicializar base de datos local
+                    updateLoadingMessage('Configurando almacenamiento local...');
+                    await localDB.init();
+                    
+                    // 2. Inicializar sesión de Supabase
+                    updateLoadingMessage('Verificando autenticación...');
+                    await supabaseManager.initSession();
+                    
+                    // 3. Configurar tema
+                    this.setTheme(this.theme);
+                    
+                    // 4. Verificar si hay datos legacy para migrar
+                    updateLoadingMessage('Verificando datos existentes...');
+                    await localDB.migrateFromLocalStorage();
+                    
+                    // 5. Verificar integridad de la base de datos
+                    const integrity = await localDB.checkIntegrity();
+                    console.log('Integridad de la base de datos:', integrity);
+                    
+                    // 6. Inicializar sincronización
+                    updateLoadingMessage('Configurando sincronización...');
+                    syncManager.updateConnectionStatus();
+                    
+                    // 7. Verificar autenticación y cargar vista apropiada
+                    if (supabaseManager.user) {
+                        this.currentUser = supabaseManager.user;
+                        await this.loadAuthenticatedView();
+                    } else {
+                        await this.loadLoginView();
+                    }
+                    
+                    this.isInitialized = true;
+                    console.log('✅ Aplicación inicializada correctamente');
+                    
+                } catch (error) {
+                    console.error('❌ Error inicializando aplicación:', error);
+                    this.showErrorScreen(error.message);
+                } finally {
+                    // Ocultar pantalla de carga
+                    setTimeout(() => {
+                        const loadingScreen = document.getElementById('loading-screen');
+                        if (loadingScreen) {
+                            loadingScreen.style.display = 'none';
+                        }
+                        
+                        const appContainer = document.getElementById('app');
+                        if (appContainer) {
+                            appContainer.style.display = 'block';
+                        }
+                        
+                        document.body.classList.add('loaded');
+                        
+                        // Iniciar backup automático
+                        this.startAutoBackup();
+                    }, 500);
+                }
+            }
+            
+            // Cargar vista de login
+            async loadLoginView() {
+                const appContainer = document.getElementById('app');
+                appContainer.innerHTML = `
+                    <div class="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                        <div class="card w-full max-w-md">
+                            <div class="card-header text-center">
+                                <h1 class="text-2xl font-bold text-gray-900">Commission Manager Pro</h1>
+                                <p class="text-gray-600 mt-2">Gestión profesional de comisiones</p>
+                            </div>
+                            <div class="card-body">
+                                <div id="login-form">
+                                    <div class="form-group">
+                                        <label for="email" class="form-label">Email</label>
+                                        <input type="email" id="email" class="form-control" placeholder="tu@email.com">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="password" class="form-label">Contraseña</label>
+                                        <input type="password" id="password" class="form-control" placeholder="••••••••">
+                                    </div>
+                                    <button id="login-btn" class="btn btn-primary w-full mt-4">
+                                        Iniciar Sesión
+                                    </button>
+                                    <div class="text-center mt-4">
+                                        <a href="#" id="register-link" class="text-sm text-primary hover:underline">
+                                            ¿No tienes cuenta? Regístrate
+                                        </a>
+                                    </div>
+                                </div>
+                                <div id="register-form" class="hidden">
+                                    <div class="form-group">
+                                        <label for="reg-name" class="form-label">Nombre completo</label>
+                                        <input type="text" id="reg-name" class="form-control" placeholder="Tu nombre">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="reg-email" class="form-label">Email</label>
+                                        <input type="email" id="reg-email" class="form-control" placeholder="tu@email.com">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="reg-password" class="form-label">Contraseña</label>
+                                        <input type="password" id="reg-password" class="form-control" placeholder="Mínimo 6 caracteres">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="reg-confirm" class="form-label">Confirmar contraseña</label>
+                                        <input type="password" id="reg-confirm" class="form-control" placeholder="Repite tu contraseña">
+                                    </div>
+                                    <button id="register-btn" class="btn btn-primary w-full mt-4">
+                                        Crear Cuenta
+                                    </button>
+                                    <div class="text-center mt-4">
+                                        <a href="#" id="back-to-login" class="text-sm text-primary hover:underline">
+                                            Volver a inicio de sesión
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-footer text-center text-sm text-gray-500">
+                                <p>💡 La aplicación funciona completamente offline</p>
+                                <p class="mt-1">Los cambios se sincronizarán automáticamente</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Agregar event listeners
+                this.setupAuthListeners();
+            }
+            
+            // Configurar listeners de autenticación
+            setupAuthListeners() {
+                // Login
+                const loginBtn = document.getElementById('login-btn');
+                if (loginBtn) {
+                    loginBtn.addEventListener('click', async () => {
+                        const email = document.getElementById('email')?.value;
+                        const password = document.getElementById('password')?.value;
+                        
+                        if (!email || !password) {
+                            this.showToast('Por favor, completa todos los campos', 'warning');
+                            return;
+                        }
+                        
+                        loginBtn.disabled = true;
+                        loginBtn.innerHTML = '<div class="spinner spinner-sm"></div> Iniciando...';
+                        
+                        const result = await supabaseManager.login(email, password);
+                        
+                        if (result.success) {
+                            this.currentUser = result.user;
+                            await this.loadAuthenticatedView();
+                            this.showToast('¡Bienvenido!', 'success');
+                        } else {
+                            this.showToast(result.error, 'error');
+                            loginBtn.disabled = false;
+                            loginBtn.textContent = 'Iniciar Sesión';
+                        }
+                    });
+                }
+                
+                // Registro
+                const registerLink = document.getElementById('register-link');
+                const backToLogin = document.getElementById('back-to-login');
+                const registerBtn = document.getElementById('register-btn');
+                
+                if (registerLink) {
+                    registerLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        document.getElementById('login-form').classList.add('hidden');
+                        document.getElementById('register-form').classList.remove('hidden');
+                    });
+                }
+                
+                if (backToLogin) {
+                    backToLogin.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        document.getElementById('register-form').classList.add('hidden');
+                        document.getElementById('login-form').classList.remove('hidden');
+                    });
+                }
+                
+                if (registerBtn) {
+                    registerBtn.addEventListener('click', async () => {
+                        const name = document.getElementById('reg-name')?.value;
+                        const email = document.getElementById('reg-email')?.value;
+                        const password = document.getElementById('reg-password')?.value;
+                        const confirm = document.getElementById('reg-confirm')?.value;
+                        
+                        if (!name || !email || !password || !confirm) {
+                            this.showToast('Por favor, completa todos los campos', 'warning');
+                            return;
+                        }
+                        
+                        if (password !== confirm) {
+                            this.showToast('Las contraseñas no coinciden', 'error');
+                            return;
+                        }
+                        
+                        if (password.length < 6) {
+                            this.showToast('La contraseña debe tener al menos 6 caracteres', 'error');
+                            return;
+                        }
+                        
+                        registerBtn.disabled = true;
+                        registerBtn.innerHTML = '<div class="spinner spinner-sm"></div> Creando cuenta...';
+                        
+                        const userData = {
+                            nombre: name,
+                            nombre_usuario: email.split('@')[0]
+                        };
+                        
+                        const result = await supabaseManager.register(email, password, userData);
+                        
+                        if (result.success) {
+                            this.currentUser = result.user;
+                            await this.loadAuthenticatedView();
+                            this.showToast('¡Cuenta creada exitosamente!', 'success');
+                        } else {
+                            this.showToast(result.error, 'error');
+                            registerBtn.disabled = false;
+                            registerBtn.textContent = 'Crear Cuenta';
+                        }
+                    });
+                }
+            }
+            
+            // Cargar vista autenticada
+            async loadAuthenticatedView() {
+                const appContainer = document.getElementById('app');
+                
+                // Obtener perfil del usuario
+                const profile = await supabaseManager.getUserProfile();
+                
+                // Obtener empresas del usuario
+                const empresas = await localDB.getAllByIndex('empresas', 'usuario_id', profile?.id);
+                
+                appContainer.innerHTML = `
+                    <!-- Navbar -->
+                    <nav class="navbar">
+                        <div class="flex items-center gap-3">
+                            <button id="sidebar-toggle" class="btn btn-icon btn-secondary md:hidden">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                                </svg>
+                            </button>
+                            <div class="navbar-brand">
+                                💼 Commission Manager Pro
+                            </div>
+                        </div>
+                        
+                        <!-- Selector de empresa -->
+                        <div class="flex items-center gap-3">
+                            <div class="relative">
+                                <select id="company-selector" class="form-control form-select">
+                                    <option value="">Seleccionar empresa</option>
+                                    ${empresas.map(empresa => `
+                                        <option value="${empresa.id}" ${this.currentCompany?.id === empresa.id ? 'selected' : ''}>
+                                            ${empresa.nombre}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            
+                            <!-- Botón de sincronización -->
+                            <button id="sync-now-btn" class="btn btn-icon btn-secondary" title="Sincronizar ahora">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </button>
+                            
+                            <!-- Menú de usuario -->
+                            <div class="user-menu relative">
+                                <button id="user-menu-btn" class="btn btn-icon btn-secondary">
+                                    <div class="avatar avatar-sm">
+                                        ${profile?.nombre ? profile.nombre.charAt(0).toUpperCase() : 'U'}
+                                    </div>
+                                </button>
+                                <div class="user-menu-dropdown">
+                                    <div class="px-4 py-3 border-b border-gray-200">
+                                        <p class="text-sm font-medium text-gray-900">${profile?.nombre || 'Usuario'}</p>
+                                        <p class="text-xs text-gray-500 truncate">${profile?.email || ''}</p>
+                                    </div>
+                                    <a href="#" class="user-menu-item" data-view="profile">
+                                        <i class="bi bi-person mr-2"></i> Mi perfil
+                                    </a>
+                                    <a href="#" class="user-menu-item" data-view="settings">
+                                        <i class="bi bi-gear mr-2"></i> Configuración
+                                    </a>
+                                    <div class="user-menu-divider"></div>
+                                    <a href="#" id="logout-btn" class="user-menu-item text-danger">
+                                        <i class="bi bi-box-arrow-right mr-2"></i> Cerrar sesión
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+                    
+                    <!-- Sidebar -->
+                    <aside id="sidebar" class="sidebar">
+                        <nav class="sidebar-nav">
+                            <a href="#" class="sidebar-item" data-view="dashboard">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                                </svg>
+                                <span>Dashboard</span>
+                            </a>
+                            
+                            <a href="#" class="sidebar-item" data-view="companies">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                </svg>
+                                <span>Empresas</span>
+                            </a>
+                            
+                            <a href="#" class="sidebar-item" data-view="contracts">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span>Contratos</span>
+                            </a>
+                            
+                            <a href="#" class="sidebar-item" data-view="certifications">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span>Certificaciones</span>
+                            </a>
+                            
+                            <a href="#" class="sidebar-item" data-view="payments">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                </svg>
+                                <span>Pagos</span>
+                            </a>
+                            
+                            <a href="#" class="sidebar-item" data-view="reports">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                                <span>Reportes</span>
+                            </a>
+                            
+                            <div class="sidebar-divider my-4"></div>
+                            
+                            <a href="#" class="sidebar-item" data-view="backup">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                                </svg>
+                                <span>Backup & Restauración</span>
+                            </a>
+                            
+                            <a href="#" class="sidebar-item" data-view="help">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span>Ayuda</span>
+                            </a>
+                        </nav>
+                    </aside>
+                    
+                    <!-- Contenido principal -->
+                    <main id="main-content" class="main-content">
+                        <div id="content-view"></div>
+                    </main>
+                `;
+                
+                // Agregar event listeners
+                this.setupAuthenticatedListeners();
+                
+                // Cargar vista por defecto
+                await this.loadView(this.currentView);
+                
+                // Si hay empresas, seleccionar la primera
+                if (empresas.length > 0 && !this.currentCompany) {
+                    this.currentCompany = empresas[0];
+                    await this.updateCompanySelector();
+                    await this.loadView(this.currentView);
+                }
+            }
+            
+            // Configurar listeners para vista autenticada
+            setupAuthenticatedListeners() {
+                // Toggle sidebar en móviles
+                const sidebarToggle = document.getElementById('sidebar-toggle');
+                if (sidebarToggle) {
+                    sidebarToggle.addEventListener('click', () => {
+                        const sidebar = document.getElementById('sidebar');
+                        sidebar.classList.toggle('show');
+                    });
+                }
+                
+                // Cambiar vista desde sidebar
+                const sidebarItems = document.querySelectorAll('.sidebar-item[data-view]');
+                sidebarItems.forEach(item => {
+                    item.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        const view = item.dataset.view;
+                        
+                        // Cerrar sidebar en móviles
+                        const sidebar = document.getElementById('sidebar');
+                        if (sidebar.classList.contains('show')) {
+                            sidebar.classList.remove('show');
+                        }
+                        
+                        await this.loadView(view);
+                    });
+                });
+                
+                // Cambiar empresa
+                const companySelector = document.getElementById('company-selector');
+                if (companySelector) {
+                    companySelector.addEventListener('change', async (e) => {
+                        const companyId = e.target.value;
+                        if (companyId) {
+                            const company = await localDB.get('empresas', companyId);
+                            if (company) {
+                                this.currentCompany = company;
+                                await this.loadView(this.currentView);
+                                this.showToast(`Empresa cambiada a: ${company.nombre}`, 'success');
+                            }
+                        }
+                    });
+                }
+                
+                // Sincronizar ahora
+                const syncBtn = document.getElementById('sync-now-btn');
+                if (syncBtn) {
+                    syncBtn.addEventListener('click', async () => {
+                        syncBtn.disabled = true;
+                        syncBtn.innerHTML = '<div class="spinner spinner-sm"></div>';
+                        
+                        await syncManager.syncNow();
+                        
+                        setTimeout(() => {
+                            syncBtn.disabled = false;
+                            syncBtn.innerHTML = `
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            `;
+                        }, 1000);
+                    });
+                }
+                
+                // Cerrar sesión
+                const logoutBtn = document.getElementById('logout-btn');
+                if (logoutBtn) {
+                    logoutBtn.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        
+                        const result = await supabaseManager.logout();
+                        if (result.success) {
+                            this.currentUser = null;
+                            this.currentCompany = null;
+                            await this.loadLoginView();
+                            this.showToast('Sesión cerrada correctamente', 'success');
+                        }
+                    });
+                }
+                
+                // Menú de usuario
+                const userMenuBtn = document.getElementById('user-menu-btn');
+                const userMenuDropdown = document.querySelector('.user-menu-dropdown');
+                
+                if (userMenuBtn) {
+                    userMenuBtn.addEventListener('click', () => {
+                        userMenuDropdown.style.display = 
+                            userMenuDropdown.style.display === 'block' ? 'none' : 'block';
+                    });
+                }
+                
+                // Cerrar menú al hacer clic fuera
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.user-menu')) {
+                        userMenuDropdown.style.display = 'none';
+                    }
+                });
+            }
+            
+            // Cargar vista específica
+            async loadView(view) {
+                this.currentView = view;
+                
+                // Actualizar item activo en sidebar
+                const sidebarItems = document.querySelectorAll('.sidebar-item');
+                sidebarItems.forEach(item => {
+                    if (item.dataset.view === view) {
+                        item.classList.add('active');
+                    } else {
+                        item.classList.remove('active');
+                    }
+                });
+                
+                const contentView = document.getElementById('content-view');
+                if (!contentView) return;
+                
+                switch (view) {
+                    case 'dashboard':
+                        await this.loadDashboardView();
+                        break;
+                    case 'companies':
+                        await this.loadCompaniesView();
+                        break;
+                    case 'contracts':
+                        await this.loadContractsView();
+                        break;
+                    case 'certifications':
+                        await this.loadCertificationsView();
+                        break;
+                    case 'payments':
+                        await this.loadPaymentsView();
+                        break;
+                    case 'reports':
+                        await this.loadReportsView();
+                        break;
+                    case 'profile':
+                        await this.loadProfileView();
+                        break;
+                    case 'settings':
+                        await this.loadSettingsView();
+                        break;
+                    case 'backup':
+                        await this.loadBackupView();
+                        break;
+                    case 'help':
+                        await this.loadHelpView();
+                        break;
+                    default:
+                        await this.loadDashboardView();
+                }
+            }
+            
+            // Cargar vista del dashboard
+            async loadDashboardView() {
+                const contentView = document.getElementById('content-view');
+                
+                // Obtener estadísticas
+                const stats = await this.getDashboardStats();
+                
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+                        <p class="text-gray-600">Resumen de tu actividad y estadísticas</p>
+                    </div>
+                    
+                    <!-- Stats Grid -->
+                    <div class="stats-grid mb-6">
+                        <div class="stat-card">
+                            <div class="stat-label">Empresas Activas</div>
+                            <div class="stat-value">${stats.activeCompanies}</div>
+                            <div class="stat-change positive">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                ${stats.companiesChange}% vs último mes
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-label">Contratos Activos</div>
+                            <div class="stat-value">${stats.activeContracts}</div>
+                            <div class="stat-change ${stats.contractsChange >= 0 ? 'positive' : 'negative'}">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="${stats.contractsChange >= 0 ? 'M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z' : 'M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z'}" clip-rule="evenodd"></path>
+                                </svg>
+                                ${Math.abs(stats.contractsChange)}% vs último mes
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-label">Comisiones Pendientes</div>
+                            <div class="stat-value">${this.formatCurrency(stats.pendingCommissions)}</div>
+                            <div class="stat-change ${stats.commissionsChange >= 0 ? 'positive' : 'negative'}">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="${stats.commissionsChange >= 0 ? 'M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z' : 'M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z'}" clip-rule="evenodd"></path>
+                                </svg>
+                                ${Math.abs(stats.commissionsChange)}% vs último mes
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-label">Comisiones Pagadas</div>
+                            <div class="stat-value">${this.formatCurrency(stats.paidCommissions)}</div>
+                            <div class="stat-change positive">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                ${stats.paymentsChange}% vs último mes
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Gráficos y tablas -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Contratos por estado -->
+                        <div class="chart-container">
+                            <div class="chart-header">
+                                <div class="chart-title">Contratos por Estado</div>
+                                <select class="form-control form-select w-auto">
+                                    <option>Últimos 30 días</option>
+                                    <option>Últimos 90 días</option>
+                                    <option>Este año</option>
+                                </select>
+                            </div>
+                            <div id="contracts-chart" style="height: 300px;">
+                                <!-- Canvas para gráfico -->
+                                <canvas id="contractsChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- Últimas certificaciones -->
+                        <div class="chart-container">
+                            <div class="chart-header">
+                                <div class="chart-title">Últimas Certificaciones</div>
+                                <a href="#" data-view="certifications" class="text-sm text-primary hover:underline">
+                                    Ver todas
+                                </a>
+                            </div>
+                            <div class="data-table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Contrato</th>
+                                            <th>Mes</th>
+                                            <th>Comisión</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${stats.recentCertifications.map(cert => `
+                                            <tr>
+                                                <td class="truncate max-w-xs">${cert.contract_name}</td>
+                                                <td>${new Date(cert.mes).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}</td>
+                                                <td>${this.formatCurrency(cert.comision_calculada)}</td>
+                                                <td>
+                                                    <span class="status-badge ${cert.pagado ? 'status-completed' : 'status-pending'}">
+                                                        ${cert.pagado ? 'Pagado' : 'Pendiente'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Últimos pagos -->
+                    <div class="chart-container mt-6">
+                        <div class="chart-header">
+                            <div class="chart-title">Últimos Pagos</div>
+                            <a href="#" data-view="payments" class="text-sm text-primary hover:underline">
+                                Ver todos
+                            </a>
+                        </div>
+                        <div class="data-table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Empresa</th>
+                                        <th>Monto</th>
+                                        <th>Método</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${stats.recentPayments.map(payment => `
+                                        <tr>
+                                            <td>${new Date(payment.fecha_pago).toLocaleDateString('es-ES')}</td>
+                                            <td>${payment.company_name}</td>
+                                            <td>${this.formatCurrency(payment.monto_total)}</td>
+                                            <td>
+                                                <span class="payment-method">
+                                                    ${this.getPaymentMethodIcon(payment.metodo)}
+                                                    ${payment.metodo || 'No especificado'}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="status-badge status-completed">
+                                                    Completado
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                
+                // Inicializar gráficos
+                this.initDashboardCharts();
+                
+                // Agregar event listeners a los enlaces
+                const viewLinks = contentView.querySelectorAll('[data-view]');
+                viewLinks.forEach(link => {
+                    link.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        await this.loadView(link.dataset.view);
+                    });
+                });
+            }
+            
+            // Obtener estadísticas del dashboard
+            async getDashboardStats() {
+                // Esta es una implementación básica
+                // En una aplicación real, estos datos vendrían de la base de datos
+                
+                const profile = await supabaseManager.getUserProfile();
+                let empresas = [];
+                let contratos = [];
+                let certificaciones = [];
+                let pagos = [];
+                
+                if (profile) {
+                    empresas = await localDB.getAllByIndex('empresas', 'usuario_id', profile.id);
+                    
+                    if (empresas.length > 0) {
+                        const empresaIds = empresas.map(e => e.id);
+                        
+                        // Obtener contratos de las empresas
+                        for (const empresaId of empresaIds) {
+                            const empresaContratos = await localDB.getAllByIndex('contratos', 'empresa_id', empresaId);
+                            contratos = [...contratos, ...empresaContratos];
+                        }
+                        
+                        // Obtener certificaciones de los contratos
+                        for (const contrato of contratos) {
+                            const contratoCertificaciones = await localDB.getAllByIndex('certificaciones', 'contrato_id', contrato.id);
+                            certificaciones = [...certificaciones, ...contratoCertificaciones];
+                        }
+                        
+                        // Obtener pagos de las empresas
+                        for (const empresaId of empresaIds) {
+                            const empresaPagos = await localDB.getAllByIndex('pagos', 'empresa_id', empresaId);
+                            pagos = [...pagos, ...empresaPagos];
+                        }
+                    }
+                }
+                
+                // Calcular estadísticas
+                const activeCompanies = empresas.filter(e => e.estado === 'activa').length;
+                const activeContracts = contratos.filter(c => c.estado === 'activo').length;
+                
+                const pendingCommissions = certificaciones
+                    .filter(c => !c.pagado)
+                    .reduce((sum, cert) => sum + (cert.comision_calculada || 0), 0);
+                
+                const paidCommissions = pagos
+                    .reduce((sum, pago) => sum + (pago.monto_total || 0), 0);
+                
+                // Datos de ejemplo para el dashboard
+                return {
+                    activeCompanies,
+                    activeContracts,
+                    pendingCommissions,
+                    paidCommissions,
+                    companiesChange: 12,
+                    contractsChange: 8,
+                    commissionsChange: 15,
+                    paymentsChange: 20,
+                    recentCertifications: certificaciones.slice(0, 5).map(cert => ({
+                        ...cert,
+                        contract_name: contratos.find(c => c.id === cert.contrato_id)?.nombre || 'Contrato',
+                        pagado: Math.random() > 0.5 // Ejemplo
+                    })),
+                    recentPayments: pagos.slice(0, 5).map(pago => ({
+                        ...pago,
+                        company_name: empresas.find(e => e.id === pago.empresa_id)?.nombre || 'Empresa'
+                    }))
+                };
+            }
+            
+            // Inicializar gráficos del dashboard
+            initDashboardCharts() {
+                const canvas = document.getElementById('contractsChart');
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                
+                // Datos de ejemplo
+                const data = {
+                    labels: ['Activos', 'Completados', 'Cancelados', 'Pendientes'],
+                    datasets: [{
+                        data: [65, 25, 5, 5],
+                        backgroundColor: [
+                            '#10b981', // success
+                            '#3b82f6', // info
+                            '#ef4444', // danger
+                            '#f59e0b'  // warning
+                        ],
+                        borderWidth: 1
+                    }]
+                };
+                
+                // Crear gráfico de dona
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Obtener icono de método de pago
+            getPaymentMethodIcon(method) {
+                const icons = {
+                    'transferencia': '🏦',
+                    'efectivo': '💵',
+                    'cheque': '📄',
+                    'tarjeta': '💳',
+                    'paypal': '🔵',
+                    'default': '💰'
+                };
+                
+                return icons[method?.toLowerCase()] || icons.default;
+            }
+            
+            // Formatear moneda
+            formatCurrency(amount) {
+                const formatter = new Intl.NumberFormat('es-ES', {
+                    style: 'currency',
+                    currency: this.currency,
+                    minimumFractionDigits: 2
+                });
+                
+                return formatter.format(amount || 0);
+            }
+            
+            // Configurar tema
+            setTheme(theme) {
+                this.theme = theme;
+                document.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('theme', theme);
+            }
+            
+            // Actualizar selector de empresa
+            async updateCompanySelector() {
+                const selector = document.getElementById('company-selector');
+                if (!selector) return;
+                
+                const profile = await supabaseManager.getUserProfile();
+                if (!profile) return;
+                
+                const empresas = await localDB.getAllByIndex('empresas', 'usuario_id', profile.id);
+                
+                selector.innerHTML = `
+                    <option value="">Seleccionar empresa</option>
+                    ${empresas.map(empresa => `
+                        <option value="${empresa.id}" ${this.currentCompany?.id === empresa.id ? 'selected' : ''}>
+                            ${empresa.nombre}
+                        </option>
+                    `).join('')}
+                `;
+            }
+            
+            // Mostrar toast
+            showToast(message, type = 'info') {
+                const container = document.getElementById('toasts-container');
+                if (!container) return;
+                
+                const toast = document.createElement('div');
+                toast.className = `toast fade-in ${type === 'success' ? 'toast-success' : 
+                    type === 'error' ? 'toast-error' : 
+                    type === 'warning' ? 'toast-warning' : 'toast-info'}`;
+                
+                const icons = {
+                    success: '✓',
+                    error: '✗',
+                    warning: '⚠',
+                    info: 'ℹ'
+                };
+                
+                toast.innerHTML = `
+                    <div class="toast-header">
+                        <strong class="me-auto">${icons[type] || 'ℹ'} ${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+                        <button type="button" class="btn-close" onclick="this.parentElement.parentElement.remove()">
+                            ×
+                        </button>
+                    </div>
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                `;
+                
+                container.appendChild(toast);
+                
+                // Auto-eliminar después de 5 segundos
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.remove();
+                    }
+                }, 5000);
+            }
+            
+            // Mostrar pantalla de error
+            showErrorScreen(message) {
+                const appContainer = document.getElementById('app');
+                if (!appContainer) return;
+                
+                appContainer.innerHTML = `
+                    <div class="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                        <div class="card w-full max-w-md">
+                            <div class="card-body text-center">
+                                <div class="text-danger text-5xl mb-4">⚠️</div>
+                                <h2 class="text-xl font-bold text-gray-900 mb-2">Error de Inicialización</h2>
+                                <p class="text-gray-600 mb-4">${message}</p>
+                                <div class="flex gap-3 justify-center">
+                                    <button onclick="location.reload()" class="btn btn-primary">
+                                        Recargar Aplicación
+                                    </button>
+                                    <button onclick="window.app.init()" class="btn btn-secondary">
+                                        Reintentar
+                                    </button>
+                                </div>
+                                <div class="mt-4 text-sm text-gray-500">
+                                    <p>Si el problema persiste, contacta con soporte.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Iniciar backup automático
+            startAutoBackup() {
+                // Realizar backup automático cada 24 horas
+                setInterval(async () => {
+                    try {
+                        await localDB.autoBackup();
+                        console.log('✅ Backup automático completado');
+                    } catch (error) {
+                        console.error('❌ Error en backup automático:', error);
+                    }
+                }, 24 * 60 * 60 * 1000); // 24 horas
+                
+                // Limpiar datos antiguos cada semana
+                setInterval(async () => {
+                    try {
+                        const cleaned = await localDB.cleanupOldData();
+                        console.log(`🗑️ Limpiados ${cleaned} registros antiguos`);
+                    } catch (error) {
+                        console.error('❌ Error limpiando datos antiguos:', error);
+                    }
+                }, 7 * 24 * 60 * 60 * 1000); // 7 días
+            }
+            
+            // Métodos para otras vistas (simplificados por brevedad)
+            async loadCompaniesView() {
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-900">Empresas</h1>
+                                <p class="text-gray-600">Gestiona tus empresas y sus configuraciones</p>
+                            </div>
+                            <button id="new-company-btn" class="btn btn-primary">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                Nueva Empresa
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Las empresas se cargarán aquí dinámicamente -->
+                        <div id="companies-list" class="col-span-full">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">🏢</div>
+                                <h3 class="text-lg font-medium text-gray-900 mb-2">No hay empresas</h3>
+                                <p class="text-gray-600 mb-4">Comienza agregando tu primera empresa</p>
+                                <button id="add-first-company" class="btn btn-primary">
+                                    Agregar Empresa
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Cargar empresas dinámicamente
+                await this.loadCompaniesList();
+            }
+            
+            async loadCompaniesList() {
+                const profile = await supabaseManager.getUserProfile();
+                if (!profile) return;
+                
+                const empresas = await localDB.getAllByIndex('empresas', 'usuario_id', profile.id);
+                const companiesList = document.getElementById('companies-list');
+                
+                if (!companiesList) return;
+                
+                if (empresas.length === 0) {
+                    companiesList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🏢</div>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">No hay empresas</h3>
+                            <p class="text-gray-600 mb-4">Comienza agregando tu primera empresa</p>
+                            <button id="add-first-company" class="btn btn-primary">
+                                Agregar Empresa
+                            </button>
+                        </div>
+                    `;
+                    
+                    document.getElementById('add-first-company')?.addEventListener('click', () => {
+                        this.showCompanyModal();
+                    });
+                    return;
+                }
+                
+                companiesList.innerHTML = empresas.map(empresa => `
+                    <div class="col-span-1">
+                        <div class="card hover-lift">
+                            <div class="card-body">
+                                <div class="flex items-start justify-between mb-4">
+                                    <div>
+                                        <h3 class="text-lg font-semibold text-gray-900">${empresa.nombre}</h3>
+                                        <p class="text-sm text-gray-600">${empresa.director || 'Sin director'}</p>
+                                    </div>
+                                    <span class="status-badge ${empresa.estado === 'activa' ? 'status-active' : 'status-inactive'}">
+                                        ${empresa.estado === 'activa' ? 'Activa' : 'Inactiva'}
+                                    </span>
+                                </div>
+                                
+                                <p class="text-gray-700 mb-4 text-sm line-clamp-2">${empresa.descripcion || 'Sin descripción'}</p>
+                                
+                                <div class="flex items-center justify-between text-sm text-gray-500">
+                                    <div>
+                                        <span class="font-medium">Comisión:</span> ${empresa.comision_default}%
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${empresa.id}">
+                                            Editar
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" data-action="delete" data-id="${empresa.id}">
+                                            Eliminar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+                // Agregar event listeners a los botones
+                companiesList.querySelectorAll('[data-action="edit"]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.showCompanyModal(btn.dataset.id);
+                    });
+                });
+                
+                companiesList.querySelectorAll('[data-action="delete"]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.deleteCompany(btn.dataset.id);
+                    });
+                });
+            }
+            
+            async showCompanyModal(companyId = null) {
+                // Implementar modal para crear/editar empresa
+                console.log('Mostrar modal de empresa:', companyId);
+                this.showToast('Funcionalidad en desarrollo', 'info');
+            }
+            
+            async deleteCompany(companyId) {
+                if (!confirm('¿Estás seguro de eliminar esta empresa? Esta acción no se puede deshacer.')) {
+                    return;
+                }
+                
+                try {
+                    await localDB.delete('empresas', companyId);
+                    
+                    // Agregar a cola de sincronización
+                    await localDB.addToSyncQueue('DELETE', 'empresas', companyId, {});
+                    
+                    this.showToast('Empresa eliminada correctamente', 'success');
+                    await this.loadCompaniesList();
+                    await this.updateCompanySelector();
+                } catch (error) {
+                    this.showToast('Error al eliminar empresa', 'error');
+                }
+            }
+            
+            async loadContractsView() {
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-900">Contratos</h1>
+                                <p class="text-gray-600">Gestiona tus contratos y suplementos</p>
+                            </div>
+                            <button id="new-contract-btn" class="btn btn-primary">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                Nuevo Contrato
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-container">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="form-label">Empresa</label>
+                                <select id="filter-company" class="form-control form-select">
+                                    <option value="">Todas las empresas</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Estado</label>
+                                <select id="filter-status" class="form-control form-select">
+                                    <option value="">Todos los estados</option>
+                                    <option value="activo">Activo</option>
+                                    <option value="completado">Completado</option>
+                                    <option value="cancelado">Cancelado</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Fecha desde</label>
+                                <input type="date" id="filter-date-from" class="form-control">
+                            </div>
+                            <div>
+                                <label class="form-label">Fecha hasta</label>
+                                <input type="date" id="filter-date-to" class="form-control">
+                            </div>
+                        </div>
+                        <div class="flex justify-end mt-4">
+                            <button id="apply-filters" class="btn btn-primary">Aplicar Filtros</button>
+                            <button id="reset-filters" class="btn btn-secondary ml-2">Restablecer</button>
+                        </div>
+                    </div>
+                    
+                    <div id="contracts-list">
+                        <!-- Los contratos se cargarán aquí dinámicamente -->
+                    </div>
+                `;
+                
+                await this.loadContractsList();
+            }
+            
+            async loadContractsList() {
+                // Implementar carga de contratos
+                this.showToast('Funcionalidad en desarrollo', 'info');
+            }
+            
+            async loadCertificationsView() {
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-900">Certificaciones</h1>
+                                <p class="text-gray-600">Gestiona certificaciones por mes y contrato</p>
+                            </div>
+                            <button id="new-certification-btn" class="btn btn-primary">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                Nueva Certificación
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="certifications-list">
+                        <!-- Las certificaciones se cargarán aquí dinámicamente -->
+                    </div>
+                `;
+                
+                this.showToast('Funcionalidad en desarrollo', 'info');
+            }
+            
+            async loadPaymentsView() {
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-900">Pagos</h1>
+                                <p class="text-gray-600">Gestiona pagos específicos y globales</p>
+                            </div>
+                            <button id="new-payment-btn" class="btn btn-primary">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                Nuevo Pago
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="payments-list">
+                        <!-- Los pagos se cargarán aquí dinámicamente -->
+                    </div>
+                `;
+                
+                this.showToast('Funcionalidad en desarrollo', 'info');
+            }
+            
+            async loadReportsView() {
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-900">Reportes</h1>
+                                <p class="text-gray-600">Genera reportes y exporta datos</p>
+                            </div>
+                            <div class="flex gap-3">
+                                <button id="export-json" class="btn btn-secondary">
+                                    Exportar JSON
+                                </button>
+                                <button id="export-csv" class="btn btn-secondary">
+                                    Exportar CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="chart-container">
+                            <div class="chart-header">
+                                <div class="chart-title">Reporte por Período</div>
+                            </div>
+                            <div class="p-4">
+                                <form id="report-form">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="form-label">Fecha inicio</label>
+                                            <input type="date" class="form-control" required>
+                                        </div>
+                                        <div>
+                                            <label class="form-label">Fecha fin</label>
+                                            <input type="date" class="form-control" required>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="form-label">Tipo de reporte</label>
+                                            <select class="form-control form-select" required>
+                                                <option value="">Seleccionar tipo</option>
+                                                <option value="comisiones">Comisiones</option>
+                                                <option value="pagos">Pagos</option>
+                                                <option value="contratos">Contratos</option>
+                                                <option value="certificaciones">Certificaciones</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4">
+                                        <button type="submit" class="btn btn-primary">
+                                            Generar Reporte
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <div class="chart-header">
+                                <div class="chart-title">Filtros Avanzados</div>
+                            </div>
+                            <div class="p-4">
+                                <form id="advanced-filters">
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="form-label">Empresa</label>
+                                            <select class="form-control form-select">
+                                                <option value="">Todas las empresas</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="form-label">Estado</label>
+                                            <select class="form-control form-select">
+                                                <option value="">Todos los estados</option>
+                                                <option value="activo">Activo</option>
+                                                <option value="completado">Completado</option>
+                                                <option value="cancelado">Cancelado</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="form-label">Rango de montos</label>
+                                            <div class="flex gap-2">
+                                                <input type="number" class="form-control" placeholder="Mínimo">
+                                                <input type="number" class="form-control" placeholder="Máximo">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4">
+                                        <button type="submit" class="btn btn-primary">
+                                            Aplicar Filtros
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-container mt-6">
+                        <div class="chart-header">
+                            <div class="chart-title">Resultados del Reporte</div>
+                        </div>
+                        <div class="p-4">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📊</div>
+                                <h3 class="text-lg font-medium text-gray-900 mb-2">No hay datos</h3>
+                                <p class="text-gray-600">Configura los filtros y genera un reporte</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                this.showToast('Funcionalidad en desarrollo', 'info');
+            }
+            
+            async loadProfileView() {
+                const profile = await supabaseManager.getUserProfile();
+                
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <h1 class="text-2xl font-bold text-gray-900">Mi Perfil</h1>
+                        <p class="text-gray-600">Administra tu información personal</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h2 class="text-lg font-semibold text-gray-900">Información Personal</h2>
+                                </div>
+                                <div class="card-body">
+                                    <form id="profile-form">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="form-label">Nombre completo</label>
+                                                <input type="text" class="form-control" value="${profile?.nombre || ''}" required>
+                                            </div>
+                                            <div>
+                                                <label class="form-label">Nombre de usuario</label>
+                                                <input type="text" class="form-control" value="${profile?.nombre_usuario || ''}" required>
+                                            </div>
+                                            <div class="md:col-span-2">
+                                                <label class="form-label">Email</label>
+                                                <input type="email" class="form-control" value="${profile?.email || ''}" disabled>
+                                                <p class="form-text">El email no se puede modificar</p>
+                                            </div>
+                                        </div>
+                                        <div class="mt-6">
+                                            <button type="submit" class="btn btn-primary">
+                                                Guardar Cambios
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-6">
+                                <div class="card-header">
+                                    <h2 class="text-lg font-semibold text-gray-900">Cambiar Contraseña</h2>
+                                </div>
+                                <div class="card-body">
+                                    <form id="password-form">
+                                        <div class="space-y-4">
+                                            <div>
+                                                <label class="form-label">Contraseña actual</label>
+                                                <input type="password" class="form-control" required>
+                                            </div>
+                                            <div>
+                                                <label class="form-label">Nueva contraseña</label>
+                                                <input type="password" class="form-control" required minlength="6">
+                                            </div>
+                                            <div>
+                                                <label class="form-label">Confirmar nueva contraseña</label>
+                                                <input type="password" class="form-control" required minlength="6">
+                                            </div>
+                                        </div>
+                                        <div class="mt-6">
+                                            <button type="submit" class="btn btn-primary">
+                                                Cambiar Contraseña
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h2 class="text-lg font-semibold text-gray-900">Foto de perfil</h2>
+                                </div>
+                                <div class="card-body">
+                                    <div class="text-center">
+                                        <div class="avatar avatar-lg mx-auto mb-4">
+                                            ${profile?.nombre ? profile.nombre.charAt(0).toUpperCase() : 'U'}
+                                        </div>
+                                        <input type="file" id="profile-photo" class="hidden" accept="image/*">
+                                        <label for="profile-photo" class="btn btn-secondary w-full">
+                                            Subir foto
+                                        </label>
+                                        <p class="text-sm text-gray-500 mt-2">JPEG, PNG o GIF. Máx. 5MB</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-6">
+                                <div class="card-header bg-danger text-white">
+                                    <h2 class="text-lg font-semibold">Zona de peligro</h2>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-sm text-gray-600 mb-4">
+                                        Eliminar tu cuenta es permanente. Todos tus datos serán eliminados.
+                                    </p>
+                                    <button id="delete-account-btn" class="btn btn-danger w-full">
+                                        Eliminar mi cuenta
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Configurar formularios
+                document.getElementById('profile-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    this.showToast('Funcionalidad en desarrollo', 'info');
+                });
+                
+                document.getElementById('password-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    this.showToast('Funcionalidad en desarrollo', 'info');
+                });
+                
+                document.getElementById('delete-account-btn')?.addEventListener('click', async () => {
+                    if (confirm('¿Estás seguro de eliminar tu cuenta? Esta acción no se puede deshacer.')) {
+                        this.showToast('Funcionalidad en desarrollo', 'info');
+                    }
+                });
+            }
+            
+            async loadSettingsView() {
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <h1 class="text-2xl font-bold text-gray-900">Configuración</h1>
+                        <p class="text-gray-600">Personaliza tu experiencia en la aplicación</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="text-lg font-semibold text-gray-900">Apariencia</h2>
+                            </div>
+                            <div class="card-body">
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="form-label">Tema</label>
+                                        <select id="theme-select" class="form-control form-select">
+                                            <option value="light" ${this.theme === 'light' ? 'selected' : ''}>Claro</option>
+                                            <option value="dark" ${this.theme === 'dark' ? 'selected' : ''}>Oscuro</option>
+                                            <option value="auto" ${this.theme === 'auto' ? 'selected' : ''}>Automático</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Moneda</label>
+                                        <select id="currency-select" class="form-control form-select">
+                                            <option value="USD" ${this.currency === 'USD' ? 'selected' : ''}>USD - Dólar Estadounidense</option>
+                                            <option value="CUP" ${this.currency === 'CUP' ? 'selected' : ''}>CUP - Peso Cubano</option>
+                                            <option value="MXN" ${this.currency === 'MXN' ? 'selected' : ''}>MXN - Peso Mexicano</option>
+                                            <option value="EUR" ${this.currency === 'EUR' ? 'selected' : ''}>EUR - Euro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mt-6">
+                                    <button id="save-appearance" class="btn btn-primary">
+                                        Guardar preferencias
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="text-lg font-semibold text-gray-900">Sincronización</h2>
+                            </div>
+                            <div class="card-body">
+                                <div class="space-y-4">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <label class="form-label mb-0">Sincronización automática</label>
+                                            <p class="form-text">Sincronizar cambios automáticamente cuando hay conexión</p>
+                                        </div>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" id="auto-sync" class="sr-only peer" checked>
+                                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="form-label">Intervalo de sincronización</label>
+                                        <select id="sync-interval" class="form-control form-select">
+                                            <option value="30000">30 segundos</option>
+                                            <option value="60000">1 minuto</option>
+                                            <option value="300000">5 minutos</option>
+                                            <option value="900000">15 minutos</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="form-label">Estrategia de resolución de conflictos</label>
+                                        <select id="conflict-strategy" class="form-control form-select">
+                                            <option value="last-write-wins">Último cambio gana</option>
+                                            <option value="server-wins">Servidor gana</option>
+                                            <option value="manual">Resolución manual</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mt-6">
+                                    <button id="save-sync" class="btn btn-primary">
+                                        Guardar configuración
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-6">
+                        <div class="card-header">
+                            <h2 class="text-lg font-semibold text-gray-900">Notificaciones</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <label class="form-label mb-0">Notificaciones por email</label>
+                                        <p class="form-text">Recibir notificaciones por email</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" class="sr-only peer" checked>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                                
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <label class="form-label mb-0">Notificaciones push</label>
+                                        <p class="form-text">Recibir notificaciones en el navegador</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                                
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <label class="form-label mb-0">Recordatorios de pagos</label>
+                                        <p class="form-text">Recordatorios de pagos pendientes</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" class="sr-only peer" checked>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mt-6">
+                                <button id="save-notifications" class="btn btn-primary">
+                                    Guardar preferencias
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Configurar guardado de configuración
+                document.getElementById('save-appearance')?.addEventListener('click', () => {
+                    const theme = document.getElementById('theme-select').value;
+                    const currency = document.getElementById('currency-select').value;
+                    
+                    this.setTheme(theme);
+                    this.currency = currency;
+                    localStorage.setItem('currency', currency);
+                    
+                    this.showToast('Preferencias guardadas', 'success');
+                });
+                
+                document.getElementById('save-sync')?.addEventListener('click', () => {
+                    const autoSync = document.getElementById('auto-sync').checked;
+                    const syncInterval = document.getElementById('sync-interval').value;
+                    const conflictStrategy = document.getElementById('conflict-strategy').value;
+                    
+                    syncManager.updateConfig({
+                        autoSync,
+                        syncInterval: parseInt(syncInterval),
+                        conflictStrategy
+                    });
+                    
+                    this.showToast('Configuración de sincronización guardada', 'success');
+                });
+                
+                document.getElementById('save-notifications')?.addEventListener('click', () => {
+                    this.showToast('Preferencias de notificaciones guardadas', 'success');
+                });
+            }
+            
+            async loadBackupView() {
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <h1 class="text-2xl font-bold text-gray-900">Backup & Restauración</h1>
+                        <p class="text-gray-600">Gestiona copias de seguridad y restaura datos</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="text-lg font-semibold text-gray-900">Exportar Datos</h2>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-gray-600 mb-4">
+                                    Exporta todos tus datos a un archivo para realizar copias de seguridad o migrar a otro dispositivo.
+                                </p>
+                                <div class="space-y-3">
+                                    <button id="export-json-backup" class="btn btn-secondary w-full">
+                                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                        Exportar a JSON
+                                    </button>
+                                    <button id="export-csv-backup" class="btn btn-secondary w-full">
+                                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                        Exportar a CSV
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="text-lg font-semibold text-gray-900">Importar Datos</h2>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-gray-600 mb-4">
+                                    Importa datos desde un archivo de respaldo. Esto sobrescribirá los datos existentes.
+                                </p>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="form-label">Seleccionar archivo</label>
+                                        <input type="file" id="import-file" class="form-control" accept=".json,.csv">
+                                    </div>
+                                    <button id="import-data" class="btn btn-primary w-full" disabled>
+                                        Importar Datos
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-6">
+                        <div class="card-header">
+                            <h2 class="text-lg font-semibold text-gray-900">Backups Automáticos</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <label class="form-label mb-0">Backup automático</label>
+                                    <p class="form-text">Realizar backups automáticos cada 24 horas</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="auto-backup" class="sr-only peer" checked>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+                            
+                            <div class="mt-6">
+                                <button id="backup-now" class="btn btn-primary">
+                                    Realizar Backup Ahora
+                                </button>
+                                <button id="view-backups" class="btn btn-secondary ml-3">
+                                    Ver Backups Existentes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-6">
+                        <div class="card-header">
+                            <h2 class="text-lg font-semibold text-gray-900">Restauración desde Backups</h2>
+                        </div>
+                        <div class="card-body">
+                            <div id="backups-list">
+                                <p class="text-gray-600">Cargando backups...</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Cargar lista de backups
+                await this.loadBackupsList();
+                
+                // Configurar event listeners
+                document.getElementById('export-json-backup')?.addEventListener('click', async () => {
+                    await this.exportToJSON();
+                });
+                
+                document.getElementById('backup-now')?.addEventListener('click', async () => {
+                    await this.createManualBackup();
+                });
+            }
+            
+            async loadBackupsList() {
+                const backupsList = document.getElementById('backups-list');
+                if (!backupsList) return;
+                
+                // Obtener backups de localStorage
+                const backupKeys = Object.keys(localStorage)
+                    .filter(key => key.startsWith('backup_'))
+                    .sort()
+                    .reverse();
+                
+                if (backupKeys.length === 0) {
+                    backupsList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">💾</div>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">No hay backups</h3>
+                            <p class="text-gray-600">Los backups aparecerán aquí cuando se creen</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                backupsList.innerHTML = `
+                    <div class="space-y-3">
+                        ${backupKeys.map(key => {
+                            const backupData = localStorage.getItem(key);
+                            let backupInfo = { date: key.replace('backup_', ''), items: 0 };
+                            
+                            try {
+                                const parsed = JSON.parse(backupData);
+                                backupInfo.items = Object.values(parsed).reduce((sum, arr) => sum + (arr.length || 0), 0);
+                            } catch (e) {}
+                            
+                            return `
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div>
+                                        <div class="font-medium">${backupInfo.date}</div>
+                                        <div class="text-sm text-gray-500">${backupInfo.items} items</div>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button class="btn btn-sm btn-secondary" onclick="window.app.restoreBackup('${key}')">
+                                            Restaurar
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" onclick="window.app.deleteBackup('${key}')">
+                                            Eliminar
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+            
+            async exportToJSON() {
+                try {
+                    const data = await localDB.exportToJSON();
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `commission-manager-backup-${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    URL.revokeObjectURL(url);
+                    
+                    this.showToast('Datos exportados exitosamente', 'success');
+                } catch (error) {
+                    this.showToast('Error al exportar datos', 'error');
+                }
+            }
+            
+            async createManualBackup() {
+                try {
+                    const result = await localDB.autoBackup();
+                    if (result.success) {
+                        this.showToast(`Backup creado: ${result.key}`, 'success');
+                        await this.loadBackupsList();
+                    } else {
+                        this.showToast(`Error en backup: ${result.error}`, 'error');
+                    }
+                } catch (error) {
+                    this.showToast('Error al crear backup', 'error');
+                }
+            }
+            
+            async restoreBackup(backupKey) {
+                if (!confirm('¿Estás seguro de restaurar este backup? Esto sobrescribirá los datos actuales.')) {
+                    return;
+                }
+                
+                try {
+                    const result = await localDB.restoreFromBackup(backupKey);
+                    if (result.success) {
+                        this.showToast(`Backup restaurado: ${result.backupKey}`, 'success');
+                        // Recargar la vista actual para mostrar datos actualizados
+                        await this.loadView(this.currentView);
+                    } else {
+                        this.showToast(`Error al restaurar: ${result.error}`, 'error');
+                    }
+                } catch (error) {
+                    this.showToast('Error al restaurar backup', 'error');
+                }
+            }
+            
+            async deleteBackup(backupKey) {
+                if (!confirm('¿Estás seguro de eliminar este backup?')) {
+                    return;
+                }
+                
+                localStorage.removeItem(backupKey);
+                this.showToast('Backup eliminado', 'success');
+                await this.loadBackupsList();
+            }
+            
+            async loadHelpView() {
+                const contentView = document.getElementById('content-view');
+                contentView.innerHTML = `
+                    <div class="mb-6">
+                        <h1 class="text-2xl font-bold text-gray-900">Ayuda y Soporte</h1>
+                        <p class="text-gray-600">Encuentra ayuda y recursos para usar la aplicación</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <div class="text-4xl mb-4">📚</div>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-2">Documentación</h3>
+                                <p class="text-gray-600 mb-4">
+                                    Guías detalladas y tutoriales para usar todas las funcionalidades
+                                </p>
+                                <button class="btn btn-secondary">Ver Documentación</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <div class="text-4xl mb-4">🎥</div>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-2">Video Tutoriales</h3>
+                                <p class="text-gray-600 mb-4">
+                                    Aprende viendo tutoriales en video paso a paso
+                                </p>
+                                <button class="btn btn-secondary">Ver Tutoriales</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <div class="text-4xl mb-4">🛠️</div>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-2">Soporte Técnico</h3>
+                                <p class="text-gray-600 mb-4">
+                                    Contacta con nuestro equipo de soporte para ayuda personalizada
+                                </p>
+                                <button class="btn btn-secondary">Contactar Soporte</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-6">
+                        <div class="card-header">
+                            <h2 class="text-lg font-semibold text-gray-900">Preguntas Frecuentes</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="space-y-4">
+                                <div>
+                                    <h4 class="font-medium text-gray-900 mb-1">¿Cómo funciona la sincronización offline/online?</h4>
+                                    <p class="text-gray-600">
+                                        La aplicación guarda todos los cambios localmente cuando estás offline. 
+                                        Cuando se detecta conexión a internet, sincroniza automáticamente con el servidor.
+                                    </p>
+                                </div>
+                                
+                                <div>
+                                    <h4 class="font-medium text-gray-900 mb-1">¿Puedo usar la aplicación en múltiples dispositivos?</h4>
+                                    <p class="text-gray-600">
+                                        Sí, tus datos se sincronizan entre todos los dispositivos donde inicies sesión.
+                                    </p>
+                                </div>
+                                
+                                <div>
+                                    <h4 class="font-medium text-gray-900 mb-1">¿Cómo hago backup de mis datos?</h4>
+                                    <p class="text-gray-600">
+                                        Ve a la sección Backup & Restauración para exportar tus datos o configurar backups automáticos.
+                                    </p>
+                                </div>
+                                
+                                <div>
+                                    <h4 class="font-medium text-gray-900 mb-1">¿Qué sucede si hay un conflicto de datos?</h4>
+                                    <p class="text-gray-600">
+                                        Puedes configurar la estrategia de resolución de conflictos en Configuración → Sincronización.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Función para actualizar mensaje de carga
+        function updateLoadingMessage(message) {
+            const messageEl = document.getElementById('loading-message');
+            if (messageEl) {
+                messageEl.textContent = message;
+            }
+        }
+        
+        // Crear e inicializar aplicación
+        const app = new CommissionManagerApp();
+        window.app = app;
+        
+        // Inicializar cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', () => {
+            app.init();
+        });
+        
+        // Registrar Service Worker para PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('✅ Service Worker registrado:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('⚠️ Service Worker no registrado:', error);
+                    });
+            });
+        }
+    </script>
+    
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>
