@@ -65,7 +65,7 @@ class SupabaseManager {
       if (session) {
         this.session = session;
         this.user = session.user;
-        console.log('🔑 Sesión restaurada:', this.user.email);
+        console.log('🔄 Sesión restaurada:', this.user.email);
         
         // Cargar perfil
         await this.loadProfile();
@@ -95,8 +95,8 @@ class SupabaseManager {
         console.warn('Error cargando perfil desde Supabase:', error.message);
         
         // Si es error 406 (Not Acceptable) u otro error, usar datos locales
-        if (error.code === '406' || error.code === 'PGRST116') {
-          console.log('🔄 Usando datos locales para perfil');
+        if (error.code === '406' || error.code === 'PGRST116' || error.code === 'PGRST204') {
+          console.log('📱 Usando datos locales para perfil');
           return await this.getLocalProfile();
         }
         throw error;
@@ -131,8 +131,10 @@ class SupabaseManager {
   }
 
   async getLocalProfile() {
+    if (!this.user) return null;
+    
     try {
-      const localProfile = await localDB.getByIndex('usuarios', 'auth_id', this.user.id);
+      const localProfile = await localDB.getByIndex('usuarios', 'email', this.user.email);
       if (localProfile) {
         this.profile = localProfile;
         return localProfile;
@@ -140,7 +142,7 @@ class SupabaseManager {
       
       // Crear perfil local básico
       const basicProfile = {
-        id: `local_${this.user.id}`,
+        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         auth_id: this.user.id,
         nombre: this.user.user_metadata?.nombre || 'Usuario',
         nombre_usuario: this.user.user_metadata?.nombre_usuario || this.user.email.split('@')[0],
@@ -160,7 +162,22 @@ class SupabaseManager {
       return basicProfile;
     } catch (error) {
       console.error('Error obteniendo perfil local:', error);
-      return null;
+      
+      // Crear perfil de emergencia
+      const emergencyProfile = {
+        id: `emergency_${Date.now()}`,
+        auth_id: this.user.id,
+        nombre: 'Usuario',
+        nombre_usuario: 'usuario',
+        email: this.user.email,
+        config_moneda: 'USD',
+        config_tema: 'auto',
+        fecha_creacion: new Date().toISOString(),
+        fecha_actualizacion: new Date().toISOString()
+      };
+      
+      this.profile = emergencyProfile;
+      return emergencyProfile;
     }
   }
 
@@ -190,7 +207,7 @@ class SupabaseManager {
         // Guardar localmente
         const localProfile = {
           ...profileData,
-          id: `local_${this.user.id}`,
+          id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           fecha_actualizacion: new Date().toISOString()
         };
         
@@ -251,7 +268,7 @@ class SupabaseManager {
         console.log('✅ Usuario registrado:', data.user.email);
         
         // Esperar un momento antes de crear el perfil
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Crear perfil (esto se hará automáticamente en loadProfile)
         await this.loadProfile();
@@ -585,6 +602,174 @@ class SupabaseManager {
     }
   }
 
+  async updateEmpresa(empresaId, empresaData) {
+    if (!this.profile) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
+
+    try {
+      const empresaActual = await localDB.get('empresas', empresaId);
+      if (!empresaActual || empresaActual.usuario_id !== this.profile.id) {
+        return {
+          success: false,
+          error: 'Empresa no encontrada o no autorizada'
+        };
+      }
+
+      const updatedData = {
+        ...empresaActual,
+        ...empresaData,
+        fecha_actualizacion: new Date().toISOString()
+      };
+
+      // Actualizar localmente
+      await localDB.update('empresas', updatedData);
+      
+      // Agregar a cola de sincronización
+      await localDB.addToSyncQueue('UPDATE', 'empresas', empresaId, updatedData);
+
+      return {
+        success: true,
+        empresa: updatedData,
+        message: 'Empresa actualizada correctamente'
+      };
+    } catch (error) {
+      console.error('Error actualizando empresa:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async deleteEmpresa(empresaId) {
+    if (!this.profile) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
+
+    try {
+      const empresaActual = await localDB.get('empresas', empresaId);
+      if (!empresaActual || empresaActual.usuario_id !== this.profile.id) {
+        return {
+          success: false,
+          error: 'Empresa no encontrada o no autorizada'
+        };
+      }
+
+      // 1. Verificar si hay contratos asociados
+      const contratos = await localDB.getContratosByEmpresa(empresaId);
+      if (contratos.length > 0) {
+        return {
+          success: false,
+          error: 'No se puede eliminar la empresa porque tiene contratos asociados'
+        };
+      }
+
+      // 2. Eliminar localmente
+      await localDB.delete('empresas', empresaId);
+      
+      // 3. Agregar a cola de sincronización
+      await localDB.addToSyncQueue('DELETE', 'empresas', empresaId, empresaActual);
+
+      return {
+        success: true,
+        message: 'Empresa eliminada correctamente'
+      };
+    } catch (error) {
+      console.error('Error eliminando empresa:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async getContratosByEmpresa(empresaId) {
+    try {
+      let contratos = [];
+      
+      if (this.isOnline) {
+        const { data, error } = await this.supabase
+          .from('contratos')
+          .select('*')
+          .eq('empresa_id', empresaId)
+          .order('fecha_creacion', { ascending: false });
+
+        if (!error && data) {
+          contratos = data;
+          
+          // Sincronizar con local
+          for (const contrato of contratos) {
+            await localDB.update('contratos', {
+              ...contrato,
+              fecha_actualizacion: new Date().toISOString()
+            }).catch(() => {
+              localDB.add('contratos', {
+                ...contrato,
+                fecha_creacion: new Date().toISOString(),
+                fecha_actualizacion: new Date().toISOString()
+              });
+            });
+          }
+        }
+      }
+      
+      if (contratos.length === 0) {
+        contratos = await localDB.getContratosByEmpresa(empresaId);
+      }
+      
+      return contratos;
+    } catch (error) {
+      console.error('Error obteniendo contratos:', error);
+      return await localDB.getContratosByEmpresa(empresaId);
+    }
+  }
+
+  async createContrato(contratoData) {
+    if (!this.profile) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
+
+    try {
+      const contratoId = `con_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const contratoCompleto = {
+        id: contratoId,
+        ...contratoData,
+        estado: contratoData.estado || 'activo',
+        fecha_creacion: new Date().toISOString(),
+        fecha_actualizacion: new Date().toISOString()
+      };
+
+      // Guardar localmente
+      await localDB.add('contratos', contratoCompleto);
+      
+      // Agregar a cola de sincronización
+      await localDB.addToSyncQueue('INSERT', 'contratos', contratoId, contratoCompleto);
+
+      return {
+        success: true,
+        contrato: contratoCompleto,
+        message: 'Contrato creado correctamente'
+      };
+    } catch (error) {
+      console.error('Error creando contrato:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
   async syncData() {
     if (!this.isOnline) {
       return {
@@ -624,9 +809,13 @@ class SupabaseManager {
           
           switch (item.action) {
             case 'INSERT':
+              // Remover el id local para que Supabase genere uno nuevo
+              const insertData = { ...item.data };
+              delete insertData.id; // Supabase generará un UUID
+              
               result = await this.supabase
                 .from(item.table)
-                .insert([item.data]);
+                .insert([insertData]);
               break;
               
             case 'UPDATE':
