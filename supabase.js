@@ -67,8 +67,16 @@ class SupabaseManager {
         this.user = session.user;
         console.log('🔄 Sesión restaurada:', this.user.email);
         
-        // Cargar perfil
-        await this.loadProfile();
+        // Verificar si el email está confirmado
+        if (this.user.email_confirmed_at) {
+          console.log('✅ Email confirmado');
+          // Cargar perfil
+          await this.loadProfile();
+        } else {
+          console.log('📧 Email pendiente de confirmación');
+          // Mostrar mensaje al usuario
+          this.showEmailConfirmationWarning();
+        }
         
         return session;
       }
@@ -77,6 +85,13 @@ class SupabaseManager {
     } catch (error) {
       console.error('Error restaurando sesión:', error);
       return null;
+    }
+  }
+
+  showEmailConfirmationWarning() {
+    // Esta función será llamada desde la interfaz
+    if (window.app && window.app.showToast) {
+      window.app.showToast('Por favor confirma tu email para acceder a todas las funciones', 'warning');
     }
   }
 
@@ -89,7 +104,7 @@ class SupabaseManager {
         .from('usuarios')
         .select('*')
         .eq('auth_id', this.user.id)
-        .maybeSingle(); // Usar maybeSingle en lugar de single
+        .maybeSingle();
       
       if (error) {
         console.warn('Error cargando perfil desde Supabase:', error.message);
@@ -248,7 +263,23 @@ class SupabaseManager {
             nombre_usuario: userData.nombre_usuario,
             email_verified: false
           },
-          emailRedirectTo: window.location.origin
+          emailRedirectTo: `${window.location.origin}#login`,
+          emailConfirmOptions: {
+            subject: 'Confirma tu cuenta - Commission Manager Pro',
+            message: `
+Hola ${userData.nombre},
+
+Gracias por registrarte en Commission Manager Pro. 
+Por favor confirma tu email haciendo clic en el siguiente enlace:
+
+##CONFIRMATION_LINK##
+
+Si no solicitaste esta cuenta, puedes ignorar este email.
+
+Saludos,
+El equipo de Commission Manager Pro
+`
+          }
         }
       });
 
@@ -257,27 +288,39 @@ class SupabaseManager {
         return {
           success: false,
           error: this.translateAuthError(error.message),
-          code: error.code
+          code: error.code,
+          message: this.translateAuthError(error.message)
         };
       }
 
       if (data.user) {
-        this.user = data.user;
-        this.session = data.session;
-        
         console.log('✅ Usuario registrado:', data.user.email);
         
-        // Esperar un momento antes de crear el perfil
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Guardar usuario temporalmente
+        this.user = data.user;
         
-        // Crear perfil (esto se hará automáticamente en loadProfile)
-        await this.loadProfile();
+        // Crear perfil local temporal
+        const tempProfile = {
+          id: `temp_${Date.now()}`,
+          auth_id: data.user.id,
+          nombre: userData.nombre,
+          nombre_usuario: userData.nombre_usuario,
+          email: email,
+          config_moneda: 'USD',
+          config_tema: 'auto',
+          fecha_creacion: new Date().toISOString(),
+          fecha_actualizacion: new Date().toISOString(),
+          email_confirmado: false
+        };
+        
+        await localDB.add('usuarios', tempProfile);
+        this.profile = tempProfile;
         
         return {
           success: true,
           user: data.user,
-          session: data.session,
-          message: 'Registro exitoso. Por favor verifica tu email.'
+          needsEmailVerification: true,
+          message: 'Registro exitoso. Hemos enviado un email de confirmación a tu dirección. Por favor revisa tu bandeja de entrada y confirma tu email antes de iniciar sesión.'
         };
       }
 
@@ -313,6 +356,17 @@ class SupabaseManager {
         };
       }
 
+      // Verificar si el email está confirmado
+      if (!data.user.email_confirmed_at) {
+        console.log('📧 Email no confirmado');
+        return {
+          success: false,
+          error: 'Por favor confirma tu email antes de iniciar sesión. Revisa tu bandeja de entrada.',
+          needsEmailConfirmation: true,
+          user: data.user
+        };
+      }
+
       this.user = data.user;
       this.session = data.session;
       
@@ -328,6 +382,31 @@ class SupabaseManager {
       };
     } catch (error) {
       console.error('Error en login:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async resendConfirmationEmail(email) {
+    try {
+      const { error } = await this.supabase.auth.resend({
+        type: 'signup',
+        email: email,
+        options: {
+          emailRedirectTo: `${window.location.origin}#login`
+        }
+      });
+
+      if (error) throw error;
+
+      return { 
+        success: true,
+        message: 'Se ha reenviado el email de confirmación. Por favor revisa tu bandeja de entrada.'
+      };
+    } catch (error) {
+      console.error('Error reenviando email de confirmación:', error);
       return {
         success: false,
         error: error.message
@@ -931,12 +1010,14 @@ class SupabaseManager {
   translateAuthError(errorMessage) {
     const translations = {
       'Invalid login credentials': 'Credenciales inválidas',
-      'Email not confirmed': 'Email no confirmado',
+      'Email not confirmed': 'Email no confirmado. Por favor verifica tu email antes de iniciar sesión.',
       'User already registered': 'Usuario ya registrado',
       'Password should be at least 6 characters': 'La contraseña debe tener al menos 6 caracteres',
       'Invalid email': 'Email inválido',
       'User not found': 'Usuario no encontrado',
-      'Unable to validate email address: invalid format': 'Formato de email inválido'
+      'Unable to validate email address: invalid format': 'Formato de email inválido',
+      'To signup, please provide your email': 'Por favor proporciona tu email para registrarte',
+      'Signup requires a valid password': 'Se requiere una contraseña válida para registrarse'
     };
     
     return translations[errorMessage] || errorMessage;
@@ -1023,6 +1104,22 @@ class SupabaseManager {
         success: false,
         error: error.message
       };
+    }
+  }
+
+  // Verificar estado de confirmación de email
+  async checkEmailConfirmation() {
+    if (!this.user) return false;
+    
+    try {
+      const { data, error } = await this.supabase.auth.getUser();
+      
+      if (error) throw error;
+      
+      return data.user.email_confirmed_at !== null;
+    } catch (error) {
+      console.error('Error verificando confirmación de email:', error);
+      return false;
     }
   }
 }
