@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Commission Manager Pro</title>
-    <meta name="description" content="Gesti贸n profesional de comisiones con sincronizaci贸n offline/online">
+    <meta name="description" content="Gestión profesional de comisiones con sincronización offline/online">
     <meta name="theme-color" content="#3b82f6">
     
     <!-- PWA Manifest -->
@@ -14,10 +14,10 @@
     <link rel="stylesheet" href="./icons.css">
     
     <!-- Favicon SVG -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%233b82f6%22/><text x=%2250%22 y=%2265%22 text-anchor=%22middle%22 font-size=%2260%22 fill=%22white%22>馃挵</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%233b82f6%22/><text x=%2250%22 y=%2265%22 text-anchor=%22middle%22 font-size=%2260%22 fill=%22white%22>💰</text></svg>">
     
     <style>
-        /* Estilos m铆nimos para la carga inicial */
+        /* Estilos mínimos para la carga inicial */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -164,9 +164,9 @@
 <body>
     <!-- Pantalla de carga -->
     <div id="loading-screen">
-        <div class="loading-logo">馃挵</div>
+        <div class="loading-logo">💰</div>
         <h1 style="font-weight: 600; font-size: 1.5rem; margin-bottom: 8px;">Commission Manager Pro</h1>
-        <p id="loading-message" style="opacity: 0.9; font-size: 0.9rem;">Inicializando aplicaci贸n...</p>
+        <p id="loading-message" style="opacity: 0.9; font-size: 0.9rem;">Inicializando aplicación...</p>
         <div class="loading-progress">
             <div class="loading-progress-bar"></div>
         </div>
@@ -196,7 +196,7 @@
             }
             
             async init() {
-                console.log('馃殌 Commission Manager Pro - Inicializando');
+                console.log('🚀 Commission Manager Pro - Inicializando');
                 
                 try {
                     // Actualizar mensaje
@@ -209,9 +209,9 @@
                     await localDB.checkIntegrity();
                     
                     // Actualizar mensaje
-                    this.updateLoadingMessage('Verificando autenticaci贸n...');
+                    this.updateLoadingMessage('Verificando autenticación...');
                     
-                    // Restaurar sesi贸n si existe
+                    // Restaurar sesión si existe
                     const session = await supabaseManager.restoreSession();
                     
                     if (session && supabaseManager.user?.email_confirmed_at) {
@@ -222,13 +222,13 @@
                     }
                     
                     this.isInitialized = true;
-                    console.log('鉁?Aplicaci贸n inicializada');
+                    console.log('✅ Aplicación inicializada');
                     
                 } catch (error) {
-                    console.error('鉂?Error inicializando aplicaci贸n:', error);
+                    console.error('❌ Error inicializando aplicación:', error);
                     await this.showError('Error al inicializar: ' + error.message);
                 } finally {
-                    // Ocultar pantalla de carga despu茅s de 1 segundo
+                    // Ocultar pantalla de carga después de 1 segundo
                     setTimeout(() => {
                         const loadingScreen = document.getElementById('loading-screen');
                         if (loadingScreen) {
@@ -259,9 +259,9 @@
                     <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
                         <div style="width: 100%; max-width: 400px;">
                             <div style="text-align: center; margin-bottom: 40px;">
-                                <div style="font-size: 3rem; margin-bottom: 16px;">馃挵</div>
+                                <div style="font-size: 3rem; margin-bottom: 16px;">💰</div>
                                 <h1 style="font-size: 1.75rem; font-weight: 700; color: white; margin-bottom: 8px;">Commission Manager</h1>
-                                <p style="color: rgba(255,255,255,0.9); font-size: 0.95rem;">Gesti贸n profesional de comisiones</p>
+                                <p style="color: rgba(255,255,255,0.9); font-size: 0.95rem;">Gestión profesional de comisiones</p>
                             </div>
                             
                             <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
@@ -277,26 +277,26 @@
                                     </div>
                                     
                                     <div style="margin-bottom: 24px;">
-                                        <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Contrase帽a</label>
+                                        <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Contraseña</label>
                                         <div style="position: relative;">
                                             <div class="icon-wrapper" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%);">
                                                 <div class="icon icon-lock icon-sm"></div>
                                             </div>
-                                            <input type="password" id="password" placeholder="鈥⑩€⑩€⑩€⑩€⑩€⑩€⑩€? style="width: 100%; padding: 12px 12px 12px 48px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; transition: border-color 0.2s;">
+                                            <input type="password" id="password" placeholder="••••••••" style="width: 100%; padding: 12px 12px 12px 48px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; transition: border-color 0.2s;">
                                         </div>
                                     </div>
                                     
                                     <button id="login-btn" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: background 0.2s;">
-                                        Iniciar Sesi贸n
+                                        Iniciar Sesión
                                     </button>
                                     
                                     <div style="text-align: center; margin-top: 24px;">
                                         <a href="#" id="register-link" style="font-size: 0.875rem; color: #3b82f6; text-decoration: none; font-weight: 500;">
-                                            驴No tienes cuenta? Reg铆strate
+                                            ¿No tienes cuenta? Regístrate
                                         </a>
                                         <div style="margin-top: 16px;">
                                             <a href="#" id="forgot-password" style="font-size: 0.875rem; color: #64748b; text-decoration: none;">
-                                                驴Olvidaste tu contrase帽a?
+                                                ¿Olvidaste tu contraseña?
                                             </a>
                                         </div>
                                     </div>
@@ -314,13 +314,13 @@
                                     </div>
                                     
                                     <div style="margin-bottom: 16px;">
-                                        <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Contrase帽a</label>
-                                        <input type="password" id="reg-password" placeholder="M铆nimo 6 caracteres" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
+                                        <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Contraseña</label>
+                                        <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                     </div>
                                     
                                     <div style="margin-bottom: 24px;">
-                                        <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Confirmar contrase帽a</label>
-                                        <input type="password" id="reg-confirm" placeholder="Repite tu contrase帽a" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
+                                        <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Confirmar contraseña</label>
+                                        <input type="password" id="reg-confirm" placeholder="Repite tu contraseña" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                     </div>
                                     
                                     <button id="register-btn" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 500; cursor: pointer;">
@@ -329,7 +329,7 @@
                                     
                                     <div style="text-align: center; margin-top: 24px;">
                                         <a href="#" id="back-to-login" style="font-size: 0.875rem; color: #3b82f6; text-decoration: none; font-weight: 500;">
-                                            Volver a inicio de sesi贸n
+                                            Volver a inicio de sesión
                                         </a>
                                     </div>
                                 </div>
@@ -351,7 +351,7 @@
                                     
                                     <div style="text-align: center; margin-top: 24px;">
                                         <a href="#" id="back-to-login-from-reset" style="font-size: 0.875rem; color: #3b82f6; text-decoration: none; font-weight: 500;">
-                                            Volver a inicio de sesi贸n
+                                            Volver a inicio de sesión
                                         </a>
                                     </div>
                                 </div>
@@ -362,7 +362,7 @@
                                             <div class="icon-wrapper" style="width: 24px; height: 24px;">
                                                 <div class="icon icon-sync icon-sm"></div>
                                             </div>
-                                            Sincronizaci贸n autom谩tica
+                                            Sincronización automática
                                         </span>
                                     </p>
                                 </div>
@@ -392,7 +392,7 @@
                     await this.handleRegister();
                 });
                 
-                // Recuperar contrase帽a
+                // Recuperar contraseña
                 document.getElementById('reset-btn')?.addEventListener('click', async () => {
                     await this.handleResetPassword();
                 });
@@ -446,16 +446,16 @@
                     if (result.success) {
                         this.currentUser = result.user;
                         await this.loadDashboard();
-                        this.showToast('隆Bienvenido!', 'success');
+                        this.showToast('¡Bienvenido!', 'success');
                     } else {
                         this.showToast(result.error, 'error');
                         btn.disabled = false;
-                        btn.textContent = 'Iniciar Sesi贸n';
+                        btn.textContent = 'Iniciar Sesión';
                     }
                 } catch (error) {
-                    this.showToast('Error al iniciar sesi贸n', 'error');
+                    this.showToast('Error al iniciar sesión', 'error');
                     btn.disabled = false;
-                    btn.textContent = 'Iniciar Sesi贸n';
+                    btn.textContent = 'Iniciar Sesión';
                 }
             }
             
@@ -472,19 +472,19 @@
                 }
                 
                 if (password !== confirm) {
-                    this.showToast('Las contrase帽as no coinciden', 'error');
+                    this.showToast('Las contraseñas no coinciden', 'error');
                     return;
                 }
                 
                 if (password.length < 6) {
-                    this.showToast('La contrase帽a debe tener al menos 6 caracteres', 'error');
+                    this.showToast('La contraseña debe tener al menos 6 caracteres', 'error');
                     return;
                 }
                 
                 // Validar formato de email
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                 if (!emailRegex.test(email)) {
-                    this.showToast('Por favor ingresa un email v谩lido', 'error');
+                    this.showToast('Por favor ingresa un email válido', 'error');
                     return;
                 }
                 
@@ -499,10 +499,10 @@
                     
                     if (result.success) {
                         if (result.needsEmailVerification) {
-                            // Mostrar mensaje de confirmaci贸n
+                            // Mostrar mensaje de confirmación
                             this.showEmailConfirmationMessage(email, name);
                             
-                            // Volver al formulario de login despu茅s de 5 segundos
+                            // Volver al formulario de login después de 5 segundos
                             setTimeout(() => {
                                 document.getElementById('register-form').style.display = 'none';
                                 document.getElementById('login-form').style.display = 'block';
@@ -525,7 +525,7 @@
                         
                         this.currentUser = result.user;
                         await this.loadDashboard();
-                        this.showToast('隆Cuenta creada exitosamente!', 'success');
+                        this.showToast('¡Cuenta creada exitosamente!', 'success');
                     } else {
                         this.showToast(result.error || result.message || 'Error al crear cuenta', 'error');
                         btn.disabled = false;
@@ -550,7 +550,7 @@
                 // Validar formato de email
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                 if (!emailRegex.test(email)) {
-                    this.showToast('Por favor ingresa un email v谩lido', 'error');
+                    this.showToast('Por favor ingresa un email válido', 'error');
                     return;
                 }
                 
@@ -562,7 +562,7 @@
                     
                     if (result.success) {
                         this.showToast(result.message, 'success');
-                        // Volver al login despu茅s de 3 segundos
+                        // Volver al login después de 3 segundos
                         setTimeout(() => {
                             document.getElementById('reset-password-form').style.display = 'none';
                             document.getElementById('login-form').style.display = 'block';
@@ -585,7 +585,7 @@
             showEmailConfirmationMessage(email, name) {
                 const app = document.getElementById('app');
                 
-                // Crear overlay de confirmaci贸n
+                // Crear overlay de confirmación
                 const confirmationOverlay = document.createElement('div');
                 confirmationOverlay.style.cssText = `
                     position: fixed;
@@ -603,33 +603,33 @@
                 
                 confirmationOverlay.innerHTML = `
                     <div style="background: white; border-radius: 16px; padding: 40px; max-width: 500px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-                        <div style="font-size: 4rem; margin-bottom: 20px;">馃摟</div>
+                        <div style="font-size: 4rem; margin-bottom: 20px;">📧</div>
                         <h2 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 16px;">
-                            隆Confirmaci贸n requerida!
+                            ¡Confirmación requerida!
                         </h2>
                         <p style="color: #475569; margin-bottom: 24px; line-height: 1.6;">
-                            Hola <strong>${name}</strong>, hemos enviado un email de confirmaci贸n a:
+                            Hola <strong>${name}</strong>, hemos enviado un email de confirmación a:
                             <br>
                             <strong style="color: #3b82f6;">${email}</strong>
                         </p>
                         <p style="color: #64748b; margin-bottom: 32px; font-size: 0.95rem; line-height: 1.5;">
-                            Por favor revisa tu bandeja de entrada y haz clic en el enlace de confirmaci贸n 
-                            para activar tu cuenta. <strong>Debes confirmar tu email antes de poder iniciar sesi贸n.</strong>
+                            Por favor revisa tu bandeja de entrada y haz clic en el enlace de confirmación 
+                            para activar tu cuenta. <strong>Debes confirmar tu email antes de poder iniciar sesión.</strong>
                         </p>
                         <div style="background: #f0f9ff; border-radius: 12px; padding: 20px; margin-bottom: 24px; text-align: left;">
                             <h3 style="font-size: 0.875rem; font-weight: 600; color: #0c4a6e; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
                                 <span class="icon icon-info icon-sm" style="color: #0ea5e9;"></span>
-                                驴No recibiste el email?
+                                ¿No recibiste el email?
                             </h3>
                             <p style="font-size: 0.875rem; color: #475569; margin-bottom: 12px;">
                                 1. Revisa tu carpeta de spam o correo no deseado
                                 <br>
-                                2. Aseg煤rate de que el email sea correcto
+                                2. Asegúrate de que el email sea correcto
                                 <br>
                                 3. Espera unos minutos
                             </p>
                             <button id="resend-confirmation" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; cursor: pointer;">
-                                Reenviar email de confirmaci贸n
+                                Reenviar email de confirmación
                             </button>
                         </div>
                         <div style="display: flex; gap: 12px; justify-content: center;">
@@ -671,22 +671,22 @@
                         const result = await supabaseManager.resendConfirmationEmail(email);
                         if (result.success) {
                             this.showToast('Email reenviado correctamente', 'success');
-                            btn.textContent = '鉁?Email reenviado!';
+                            btn.textContent = '✅ Email reenviado!';
                             
-                            // Habilitar bot贸n despu茅s de 10 segundos
+                            // Habilitar botón después de 10 segundos
                             setTimeout(() => {
                                 btn.disabled = false;
-                                btn.textContent = 'Reenviar email de confirmaci贸n';
+                                btn.textContent = 'Reenviar email de confirmación';
                             }, 10000);
                         } else {
                             this.showToast(result.error, 'error');
                             btn.disabled = false;
-                            btn.textContent = 'Reenviar email de confirmaci贸n';
+                            btn.textContent = 'Reenviar email de confirmación';
                         }
                     } catch (error) {
                         this.showToast('Error al reenviar email', 'error');
                         btn.disabled = false;
-                        btn.textContent = 'Reenviar email de confirmaci贸n';
+                        btn.textContent = 'Reenviar email de confirmación';
                     }
                 };
             }
@@ -704,7 +704,7 @@
                                     <div class="icon icon-menu icon-lg"></div>
                                 </button>
                                 <div style="display: flex; align-items: center; gap: 12px;">
-                                    <div style="font-size: 1.5rem;">馃挵</div>
+                                    <div style="font-size: 1.5rem;">💰</div>
                                     <div>
                                         <div style="font-weight: 600; font-size: 1.125rem;">Commission Pro</div>
                                         <div style="font-size: 0.75rem; color: #64748b;">${profile?.nombre || 'Usuario'}</div>
@@ -747,14 +747,14 @@
                                             <div class="icon-wrapper">
                                                 <div class="icon icon-settings icon-sm"></div>
                                             </div>
-                                            <span>Configuraci贸n</span>
+                                            <span>Configuración</span>
                                         </a>
                                         <div style="border-top: 1px solid #f1f5f9; margin: 8px 0;"></div>
                                         <a href="#" id="logout-btn" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; text-decoration: none; color: #ef4444;">
                                             <div class="icon-wrapper" style="background: #fee2e2;">
                                                 <div class="icon icon-logout icon-sm" style="color: #ef4444;"></div>
                                             </div>
-                                            <span>Cerrar sesi贸n</span>
+                                            <span>Cerrar sesión</span>
                                         </a>
                                     </div>
                                 </div>
@@ -773,17 +773,17 @@
                             <!-- Main content -->
                             <main style="flex: 1; padding: 24px; overflow-y: auto;">
                                 <div id="content-view">
-                                    <!-- El contenido se carga aqu铆 -->
+                                    <!-- El contenido se carga aquí -->
                                 </div>
                             </main>
                         </div>
                     </div>
                     
-                    <!-- Sidebar m贸vil -->
+                    <!-- Sidebar móvil -->
                     <div id="mobile-sidebar" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: none;">
                         <div style="position: fixed; left: 0; top: 0; bottom: 0; width: 280px; background: white; padding: 24px; overflow-y: auto;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-                                <h2 style="font-size: 1.25rem; font-weight: 600;">Men煤</h2>
+                                <h2 style="font-size: 1.25rem; font-weight: 600;">Menú</h2>
                                 <button id="close-menu" style="background: none; border: none; padding: 8px; cursor: pointer;">
                                     <div class="icon icon-x icon-lg"></div>
                                 </button>
@@ -805,7 +805,7 @@
                     { id: 'certifications', icon: 'certification', label: 'Certificaciones' },
                     { id: 'payments', icon: 'payment', label: 'Pagos' },
                     { id: 'reports', icon: 'report', label: 'Reportes' },
-                    { id: 'settings', icon: 'settings', label: 'Configuraci贸n' }
+                    { id: 'settings', icon: 'settings', label: 'Configuración' }
                 ];
                 
                 return items.map(item => `
@@ -819,7 +819,7 @@
             }
             
             setupDashboardListeners() {
-                // Toggle men煤 m贸vil
+                // Toggle menú móvil
                 const menuToggle = document.getElementById('menu-toggle');
                 const mobileSidebar = document.getElementById('mobile-sidebar');
                 
@@ -835,7 +835,7 @@
                     });
                 }
                 
-                // Men煤 usuario
+                // Menú usuario
                 const userBtn = document.getElementById('user-btn');
                 const userMenu = document.getElementById('user-menu');
                 
@@ -846,13 +846,13 @@
                     });
                 }
                 
-                // Cerrar men煤s al hacer clic fuera
+                // Cerrar menús al hacer clic fuera
                 document.addEventListener('click', () => {
                     if (userMenu) userMenu.style.display = 'none';
                     if (mobileSidebar) mobileSidebar.style.display = 'none';
                 });
                 
-                // Prevenir cierre al hacer clic dentro del men煤
+                // Prevenir cierre al hacer clic dentro del menú
                 if (userMenu) {
                     userMenu.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -867,7 +867,7 @@
                         await supabaseManager.logout();
                         this.currentUser = null;
                         await this.loadLogin();
-                        this.showToast('Sesi贸n cerrada', 'info');
+                        this.showToast('Sesión cerrada', 'info');
                     });
                 }
                 
@@ -879,18 +879,18 @@
                         if (result.success) {
                             this.showToast(`Sincronizados ${result.synced || 0} cambios`, 'success');
                         } else {
-                            this.showToast('Error en sincronizaci贸n', 'error');
+                            this.showToast('Error en sincronización', 'error');
                         }
                     });
                 }
                 
-                // Navegaci贸n
+                // Navegación
                 document.querySelectorAll('.nav-item').forEach(item => {
                     item.addEventListener('click', async (e) => {
                         e.preventDefault();
                         const view = e.currentTarget.dataset.view;
                         
-                        // Cerrar sidebar m贸vil
+                        // Cerrar sidebar móvil
                         if (mobileSidebar) {
                             mobileSidebar.style.display = 'none';
                         }
@@ -972,9 +972,9 @@
                         `).join('')}
                     </div>
                     
-                    <!-- Acciones r谩pidas -->
+                    <!-- Acciones rápidas -->
                     <div style="margin-bottom: 32px;">
-                        <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">Acciones r谩pidas</h2>
+                        <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">Acciones rápidas</h2>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px;">
                             <button data-action="new-company" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s;">
                                 <div class="icon-wrapper icon-wrapper-primary" style="margin: 0 auto 12px;">
@@ -994,7 +994,7 @@
                                 <div class="icon-wrapper" style="background: #fef3c7; margin: 0 auto 12px;">
                                     <div class="icon icon-certification icon-md" style="color: #d97706;"></div>
                                 </div>
-                                <span style="font-weight: 500;">Nueva certificaci贸n</span>
+                                <span style="font-weight: 500;">Nueva certificación</span>
                             </button>
                             
                             <button data-action="new-payment" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s;">
@@ -1015,7 +1015,7 @@
                     </div>
                 `;
                 
-                // Agregar listeners a botones de acci贸n
+                // Agregar listeners a botones de acción
                 content.querySelectorAll('[data-action]').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const action = btn.dataset.action;
@@ -1030,7 +1030,7 @@
                     const stats = await this.calculateStats(empresas);
                     return stats;
                 } catch (error) {
-                    console.error('Error obteniendo estad铆sticas:', error);
+                    console.error('Error obteniendo estadísticas:', error);
                     return this.getDefaultStats();
                 }
             }
@@ -1161,13 +1161,13 @@
                         </div>
                         
                         <div style="margin-bottom: 20px;">
-                            <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisi贸n por defecto (%)</label>
+                            <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisión por defecto (%)</label>
                             <input type="number" id="company-comision" min="0.1" max="100" step="0.1" value="1.00" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                         </div>
                         
                         <div style="margin-bottom: 20px;">
-                            <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Descripci贸n</label>
-                            <textarea id="company-descripcion" placeholder="Descripci贸n de la empresa..." style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; min-height: 100px;"></textarea>
+                            <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Descripción</label>
+                            <textarea id="company-descripcion" placeholder="Descripción de la empresa..." style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; min-height: 100px;"></textarea>
                         </div>
                         
                         <div style="margin-bottom: 24px;">
@@ -1244,11 +1244,11 @@
                     </div>
                     
                     <div id="companies-list">
-                        <!-- Las empresas se cargar谩n aqu铆 -->
+                        <!-- Las empresas se cargarán aquí -->
                     </div>
                 `;
                 
-                // Configurar bot贸n de nueva empresa
+                // Configurar botón de nueva empresa
                 document.getElementById('new-company-btn').addEventListener('click', () => {
                     this.showNewCompanyModal();
                 });
@@ -1266,7 +1266,7 @@
                     if (empresas.length === 0) {
                         container.innerHTML = `
                             <div style="text-align: center; padding: 48px; background: white; border-radius: 12px;">
-                                <div style="font-size: 3rem; margin-bottom: 16px;">馃彚</div>
+                                <div style="font-size: 3rem; margin-bottom: 16px;">🏢</div>
                                 <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">No hay empresas</h3>
                                 <p style="color: #64748b; margin-bottom: 24px;">Comienza agregando tu primera empresa</p>
                                 <button id="add-first-company" style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 500; cursor: pointer;">
@@ -1288,7 +1288,7 @@
                                     <tr>
                                         <th>Nombre</th>
                                         <th>Director</th>
-                                        <th>Comisi贸n</th>
+                                        <th>Comisión</th>
                                         <th>Estado</th>
                                         <th>Acciones</th>
                                     </tr>
@@ -1360,12 +1360,12 @@
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisi贸n por defecto (%)</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisión por defecto (%)</label>
                                 <input type="number" id="edit-company-comision" min="0.1" max="100" step="0.1" value="${empresa.comision_default || 1.00}" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Descripci贸n</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Descripción</label>
                                 <textarea id="edit-company-descripcion" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; min-height: 100px;">${empresa.descripcion || ''}</textarea>
                             </div>
                             
@@ -1426,13 +1426,13 @@
                     };
                     
                 } catch (error) {
-                    console.error('Error mostrando modal de edici贸n:', error);
+                    console.error('Error mostrando modal de edición:', error);
                     this.showToast('Error al cargar datos de la empresa', 'error');
                 }
             }
             
             async deleteCompany(id) {
-                if (!confirm('驴Est谩s seguro de eliminar esta empresa? Esta acci贸n no se puede deshacer.')) {
+                if (!confirm('¿Estás seguro de eliminar esta empresa? Esta acción no se puede deshacer.')) {
                     return;
                 }
                 
@@ -1468,11 +1468,11 @@
                     </div>
                     
                     <div id="contracts-container">
-                        <!-- Los contratos se cargar谩n aqu铆 -->
+                        <!-- Los contratos se cargarán aquí -->
                     </div>
                 `;
                 
-                // Configurar bot贸n de nuevo contrato
+                // Configurar botón de nuevo contrato
                 document.getElementById('new-contract-btn').addEventListener('click', () => {
                     this.showNewContractModal();
                 });
@@ -1491,7 +1491,7 @@
                     if (empresas.length === 0) {
                         container.innerHTML = `
                             <div class="bg-white rounded-lg p-8 text-center">
-                                <div style="font-size: 3rem; margin-bottom: 16px;">馃搫</div>
+                                <div style="font-size: 3rem; margin-bottom: 16px;">📄</div>
                                 <h3 class="text-xl font-semibold mb-2">No hay contratos</h3>
                                 <p class="text-gray-500 mb-6">Primero necesitas crear una empresa para agregar contratos</p>
                                 <button id="goto-companies" class="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium">
@@ -1518,7 +1518,7 @@
                     if (todosContratos.length === 0) {
                         container.innerHTML = `
                             <div class="bg-white rounded-lg p-8 text-center">
-                                <div style="font-size: 3rem; margin-bottom: 16px;">馃搫</div>
+                                <div style="font-size: 3rem; margin-bottom: 16px;">📄</div>
                                 <h3 class="text-xl font-semibold mb-2">No hay contratos</h3>
                                 <p class="text-gray-500 mb-6">Crea tu primer contrato para comenzar</p>
                                 <button id="add-first-contract" class="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium">
@@ -1621,11 +1621,11 @@
                             
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Nombre del contrato *</label>
-                                <input type="text" id="contract-nombre" placeholder="Ej: Contrato de construcci贸n" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;" required>
+                                <input type="text" id="contract-nombre" placeholder="Ej: Contrato de construcción" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;" required>
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">N煤mero de contrato *</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Número de contrato *</label>
                                 <div style="display: flex; gap: 8px;">
                                     <input type="text" id="contract-numero" placeholder="CTR-2024-001" style="flex: 1; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;" required>
                                     <button type="button" id="generate-number" style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 0 16px; border-radius: 8px; font-size: 0.875rem; cursor: pointer;">
@@ -1651,8 +1651,8 @@
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisi贸n personalizada (%)</label>
-                                <input type="number" id="contract-comision" min="0.1" max="100" step="0.1" placeholder="Dejar vac铆o para usar valor por defecto" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisión personalizada (%)</label>
+                                <input type="number" id="contract-comision" min="0.1" max="100" step="0.1" placeholder="Dejar vacío para usar valor por defecto" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                             </div>
                             
                             <div style="margin-bottom: 20px;">
@@ -1680,7 +1680,7 @@
                         </form>
                     `, 'Guardar Contrato');
                     
-                    // Configurar generador de n煤mero
+                    // Configurar generador de número
                     modal.querySelector('#generate-number').addEventListener('click', () => {
                         const numero = contratosManager.generarNumeroContrato(empresa.nombre);
                         modal.querySelector('#contract-numero').value = numero;
@@ -1800,7 +1800,7 @@
                     const certificaciones = await localDB.getCertificacionesByContrato(contratoId);
                     const suplementos = await localDB.getAllByIndex('suplementos', 'contrato_id', contratoId);
                     
-                    // Calcular estad铆sticas
+                    // Calcular estadísticas
                     const montoSuplementos = suplementos.reduce((sum, s) => sum + (s.monto || 0), 0);
                     const montoCertificado = certificaciones.reduce((sum, c) => sum + (c.monto_certificado || 0), 0);
                     const comisiones = certificaciones.reduce((sum, c) => sum + (c.comision_editada || c.comision_calculada || 0), 0);
@@ -1832,14 +1832,14 @@
                             </div>
                             
                             <div style="margin-bottom: 24px;">
-                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Informaci贸n del Contrato</h3>
+                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Información del Contrato</h3>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                                     <div>
                                         <div style="font-size: 0.875rem; color: #64748b;">Empresa</div>
                                         <div style="font-weight: 500;">${empresa?.nombre || '-'}</div>
                                     </div>
                                     <div>
-                                        <div style="font-size: 0.875rem; color: #64748b;">N煤mero</div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Número</div>
                                         <div style="font-weight: 500;">${contrato.numero_contrato}</div>
                                     </div>
                                     <div>
@@ -1847,7 +1847,7 @@
                                         <div style="font-weight: 500;">${this.formatCurrency(contrato.monto_base)}</div>
                                     </div>
                                     <div>
-                                        <div style="font-size: 0.875rem; color: #64748b;">Comisi贸n</div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Comisión</div>
                                         <div style="font-weight: 500;">${contrato.comision_personalizada || empresa?.comision_default || 1}%</div>
                                     </div>
                                     <div>
@@ -1870,7 +1870,7 @@
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                                         <h3 style="font-size: 1.125rem; font-weight: 600;">Certificaciones (${certificaciones.length})</h3>
                                         <button id="add-certification" class="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                                            Agregar Certificaci贸n
+                                            Agregar Certificación
                                         </button>
                                     </div>
                                     <div class="table-container">
@@ -1879,7 +1879,7 @@
                                                 <tr>
                                                     <th>Mes</th>
                                                     <th>Monto Certificado</th>
-                                                    <th>Comisi贸n</th>
+                                                    <th>Comisión</th>
                                                     <th>Estado</th>
                                                 </tr>
                                             </thead>
@@ -1909,7 +1909,7 @@
                                         <table>
                                             <thead>
                                                 <tr>
-                                                    <th>Descripci贸n</th>
+                                                    <th>Descripción</th>
                                                     <th>Monto</th>
                                                     <th>Fecha</th>
                                                 </tr>
@@ -1939,7 +1939,7 @@
                         </div>
                     `, 'Cerrar');
                     
-                    // Configurar bot贸n para agregar certificaci贸n
+                    // Configurar botón para agregar certificación
                     const addCertBtn = modal.querySelector('#add-certification');
                     if (addCertBtn) {
                         addCertBtn.addEventListener('click', () => {
@@ -1980,7 +1980,7 @@
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">N煤mero de contrato *</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Número de contrato *</label>
                                 <input type="text" id="edit-contract-numero" value="${contrato.numero_contrato}" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;" required>
                             </div>
                             
@@ -2001,8 +2001,8 @@
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisi贸n personalizada (%)</label>
-                                <input type="number" id="edit-contract-comision" value="${contrato.comision_personalizada || ''}" min="0.1" max="100" step="0.1" placeholder="Dejar vac铆o para usar valor por defecto" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisión personalizada (%)</label>
+                                <input type="number" id="edit-contract-comision" value="${contrato.comision_personalizada || ''}" min="0.1" max="100" step="0.1" placeholder="Dejar vacío para usar valor por defecto" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                             </div>
                             
                             <div style="margin-bottom: 20px;">
@@ -2075,13 +2075,13 @@
                     };
                     
                 } catch (error) {
-                    console.error('Error mostrando modal de edici贸n de contrato:', error);
+                    console.error('Error mostrando modal de edición de contrato:', error);
                     this.showToast('Error al cargar datos del contrato', 'error');
                 }
             }
             
             async deleteContract(id) {
-                if (!confirm('驴Est谩s seguro de eliminar este contrato? Esta acci贸n eliminar谩 tambi茅n todas las certificaciones asociadas.')) {
+                if (!confirm('¿Estás seguro de eliminar este contrato? Esta acción eliminará también todas las certificaciones asociadas.')) {
                     return;
                 }
                 
@@ -2111,17 +2111,17 @@
                             </div>
                             <button id="new-certification-btn" style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                                 <div class="icon icon-add icon-sm"></div>
-                                Nueva Certificaci贸n
+                                Nueva Certificación
                             </button>
                         </div>
                     </div>
                     
                     <div id="certifications-container">
-                        <!-- Las certificaciones se cargar谩n aqu铆 -->
+                        <!-- Las certificaciones se cargarán aquí -->
                     </div>
                 `;
                 
-                // Configurar bot贸n de nueva certificaci贸n
+                // Configurar botón de nueva certificación
                 document.getElementById('new-certification-btn').addEventListener('click', () => {
                     this.showNewCertificationModal();
                 });
@@ -2140,11 +2140,11 @@
                     if (allCertificaciones.length === 0) {
                         container.innerHTML = `
                             <div class="bg-white rounded-lg p-8 text-center">
-                                <div style="font-size: 3rem; margin-bottom: 16px;">馃搳</div>
+                                <div style="font-size: 3rem; margin-bottom: 16px;">📊</div>
                                 <h3 class="text-xl font-semibold mb-2">No hay certificaciones</h3>
-                                <p class="text-gray-500 mb-6">Crea tu primera certificaci贸n para comenzar</p>
+                                <p class="text-gray-500 mb-6">Crea tu primera certificación para comenzar</p>
                                 <button id="add-first-certification" class="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium">
-                                    Agregar Certificaci贸n
+                                    Agregar Certificación
                                 </button>
                             </div>
                         `;
@@ -2155,7 +2155,7 @@
                         return;
                     }
                     
-                    // Obtener informaci贸n adicional para cada certificaci贸n
+                    // Obtener información adicional para cada certificación
                     const certificacionesConInfo = [];
                     
                     for (const cert of allCertificaciones) {
@@ -2171,7 +2171,7 @@
                         }
                     }
                     
-                    // Ordenar por fecha (m谩s recientes primero)
+                    // Ordenar por fecha (más recientes primero)
                     certificacionesConInfo.sort((a, b) => new Date(b.mes) - new Date(a.mes));
                     
                     container.innerHTML = `
@@ -2183,7 +2183,7 @@
                                         <th>Contrato</th>
                                         <th>Empresa</th>
                                         <th>Monto Certificado</th>
-                                        <th>Comisi贸n</th>
+                                        <th>Comisión</th>
                                         <th>Estado</th>
                                         <th>Acciones</th>
                                     </tr>
@@ -2249,7 +2249,7 @@
                     const existingCerts = await localDB.getCertificacionesByContrato(contratoId);
                     const existingMonths = existingCerts.map(c => new Date(c.mes).toISOString().substring(0, 7));
                     
-                    const modal = this.createModal('Nueva Certificaci贸n', `
+                    const modal = this.createModal('Nueva Certificación', `
                         <form id="certification-form">
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Contrato</label>
@@ -2275,15 +2275,15 @@
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Porcentaje de comisi贸n (%)</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Porcentaje de comisión (%)</label>
                                 <input type="number" id="certification-porcentaje" value="${contrato.comision_personalizada || empresa?.comision_default || 1}" min="0.1" max="100" step="0.1" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisi贸n editada ($)</label>
-                                <input type="number" id="certification-comision-editada" min="0" step="0.01" placeholder="Dejar vac铆o para calcular autom谩ticamente" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisión editada ($)</label>
+                                <input type="number" id="certification-comision-editada" min="0" step="0.01" placeholder="Dejar vacío para calcular automáticamente" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                 <div style="margin-top: 8px; font-size: 0.875rem; color: #64748b;">
-                                    Comisi贸n calculada: <span id="calculated-commission">$0.00</span>
+                                    Comisión calculada: <span id="calculated-commission">$0.00</span>
                                 </div>
                             </div>
                             
@@ -2299,16 +2299,16 @@
                                 </label>
                             </div>
                         </form>
-                    `, 'Guardar Certificaci贸n');
+                    `, 'Guardar Certificación');
                     
-                    // Calcular comisi贸n autom谩ticamente
+                    // Calcular comisión automáticamente
                     const calcularComision = () => {
                         const monto = parseFloat(modal.querySelector('#certification-monto').value) || 0;
                         const porcentaje = parseFloat(modal.querySelector('#certification-porcentaje').value) || (contrato.comision_personalizada || empresa?.comision_default || 1);
                         const comisionCalculada = (monto * porcentaje) / 100;
                         modal.querySelector('#calculated-commission').textContent = this.formatCurrency(comisionCalculada);
                         
-                        // Si no hay comisi贸n editada, establecer la calculada
+                        // Si no hay comisión editada, establecer la calculada
                         if (!modal.querySelector('#certification-comision-editada').value) {
                             modal.querySelector('#certification-comision-editada').value = comisionCalculada.toFixed(2);
                         }
@@ -2317,7 +2317,7 @@
                     modal.querySelector('#certification-monto').addEventListener('input', calcularComision);
                     modal.querySelector('#certification-porcentaje').addEventListener('input', calcularComision);
                     
-                    // Calcular comisi贸n inicial
+                    // Calcular comisión inicial
                     calcularComision();
                     
                     modal.querySelector('form').onsubmit = async (e) => {
@@ -2331,20 +2331,20 @@
                         if (!mes) {
                             this.showToast('Seleccione un mes', 'error');
                             saveBtn.disabled = false;
-                            saveBtn.textContent = 'Guardar Certificaci贸n';
+                            saveBtn.textContent = 'Guardar Certificación';
                             return;
                         }
                         
-                        // Verificar si ya existe certificaci贸n para este mes
+                        // Verificar si ya existe certificación para este mes
                         const mesISO = new Date(mes + '-01').toISOString().split('T')[0];
                         const mesExists = existingMonths.some(existingMonth => 
                             existingMonth === mes
                         );
                         
                         if (mesExists) {
-                            this.showToast('Ya existe una certificaci贸n para este mes', 'error');
+                            this.showToast('Ya existe una certificación para este mes', 'error');
                             saveBtn.disabled = false;
-                            saveBtn.textContent = 'Guardar Certificaci贸n';
+                            saveBtn.textContent = 'Guardar Certificación';
                             return;
                         }
                         
@@ -2361,25 +2361,25 @@
                         if (!certificationData.monto_certificado) {
                             this.showToast('Ingrese el monto certificado', 'error');
                             saveBtn.disabled = false;
-                            saveBtn.textContent = 'Guardar Certificaci贸n';
+                            saveBtn.textContent = 'Guardar Certificación';
                             return;
                         }
                         
                         try {
                             const result = await supabaseManager.createCertificacion(certificationData);
                             if (result.success) {
-                                this.showToast('Certificaci贸n creada correctamente', 'success');
+                                this.showToast('Certificación creada correctamente', 'success');
                                 modal.remove();
                                 await this.loadCertificationsList();
                             } else {
                                 this.showToast(result.error, 'error');
                                 saveBtn.disabled = false;
-                                saveBtn.textContent = 'Guardar Certificaci贸n';
+                                saveBtn.textContent = 'Guardar Certificación';
                             }
                         } catch (error) {
-                            this.showToast('Error al crear certificaci贸n', 'error');
+                            this.showToast('Error al crear certificación', 'error');
                             saveBtn.disabled = false;
-                            saveBtn.textContent = 'Guardar Certificaci贸n';
+                            saveBtn.textContent = 'Guardar Certificación';
                         }
                     };
                 });
@@ -2417,7 +2417,7 @@
                                 <div class="contract-option" data-id="${contrato.id}" style="padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s;">
                                     <div style="font-weight: 600; margin-bottom: 4px;">${contrato.nombre}</div>
                                     <div style="font-size: 0.875rem; color: #64748b;">
-                                        ${contrato.empresa_nombre} 鈥?${contrato.numero_contrato}
+                                        ${contrato.empresa_nombre} • ${contrato.numero_contrato}
                                     </div>
                                     <div style="font-size: 0.875rem; margin-top: 4px;">
                                         <span style="font-weight: 500;">Monto:</span> ${this.formatCurrency(contrato.monto_base)}
@@ -2461,14 +2461,14 @@
                 try {
                     const certificacion = await localDB.get('certificaciones', id);
                     if (!certificacion) {
-                        this.showToast('Certificaci贸n no encontrada', 'error');
+                        this.showToast('Certificación no encontrada', 'error');
                         return;
                     }
                     
                     const contrato = await localDB.get('contratos', certificacion.contrato_id);
                     const empresa = await localDB.get('empresas', contrato.empresa_id);
                     
-                    const modal = this.createModal('Editar Certificaci贸n', `
+                    const modal = this.createModal('Editar Certificación', `
                         <form id="edit-certification-form">
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Contrato</label>
@@ -2490,15 +2490,15 @@
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Porcentaje de comisi贸n (%)</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Porcentaje de comisión (%)</label>
                                 <input type="number" id="edit-certification-porcentaje" value="${certificacion.porcentaje_comision}" min="0.1" max="100" step="0.1" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisi贸n editada ($)</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Comisión editada ($)</label>
                                 <input type="number" id="edit-certification-comision-editada" value="${certificacion.comision_editada || certificacion.comision_calculada}" min="0" step="0.01" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                 <div style="margin-top: 8px; font-size: 0.875rem; color: #64748b;">
-                                    Comisi贸n calculada: <span id="edit-calculated-commission">${this.formatCurrency(certificacion.comision_calculada)}</span>
+                                    Comisión calculada: <span id="edit-calculated-commission">${this.formatCurrency(certificacion.comision_calculada)}</span>
                                 </div>
                             </div>
                             
@@ -2516,7 +2516,7 @@
                         </form>
                     `, 'Guardar Cambios');
                     
-                    // Calcular comisi贸n autom谩ticamente
+                    // Calcular comisión automáticamente
                     const calcularComision = () => {
                         const monto = parseFloat(modal.querySelector('#edit-certification-monto').value) || 0;
                         const porcentaje = parseFloat(modal.querySelector('#edit-certification-porcentaje').value) || certificacion.porcentaje_comision;
@@ -2552,7 +2552,7 @@
                         try {
                             const result = await certificacionesManager.updateCertificacion(id, certificationData);
                             if (result.success) {
-                                this.showToast('Certificaci贸n actualizada correctamente', 'success');
+                                this.showToast('Certificación actualizada correctamente', 'success');
                                 modal.remove();
                                 await this.loadCertificationsList();
                             } else {
@@ -2561,20 +2561,20 @@
                                 saveBtn.textContent = 'Guardar Cambios';
                             }
                         } catch (error) {
-                            this.showToast('Error al actualizar certificaci贸n', 'error');
+                            this.showToast('Error al actualizar certificación', 'error');
                             saveBtn.disabled = false;
                             saveBtn.textContent = 'Guardar Cambios';
                         }
                     };
                     
                 } catch (error) {
-                    console.error('Error mostrando modal de edici贸n de certificaci贸n:', error);
-                    this.showToast('Error al cargar datos de la certificaci贸n', 'error');
+                    console.error('Error mostrando modal de edición de certificación:', error);
+                    this.showToast('Error al cargar datos de la certificación', 'error');
                 }
             }
             
             async deleteCertification(id) {
-                if (!confirm('驴Est谩s seguro de eliminar esta certificaci贸n?')) {
+                if (!confirm('¿Estás seguro de eliminar esta certificación?')) {
                     return;
                 }
                 
@@ -2582,14 +2582,14 @@
                     const result = await certificacionesManager.deleteCertificacion(id);
                     
                     if (result.success) {
-                        this.showToast('Certificaci贸n eliminada correctamente', 'success');
+                        this.showToast('Certificación eliminada correctamente', 'success');
                         await this.loadCertificationsList();
                     } else {
                         this.showToast(result.error, 'error');
                     }
                 } catch (error) {
-                    console.error('Error eliminando certificaci贸n:', error);
-                    this.showToast('Error al eliminar certificaci贸n', 'error');
+                    console.error('Error eliminando certificación:', error);
+                    this.showToast('Error al eliminar certificación', 'error');
                 }
             }
             
@@ -2600,7 +2600,7 @@
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <h1 style="font-size: 1.75rem; font-weight: 700; color: #1e293b; margin-bottom: 8px;">Pagos</h1>
-                                <p style="color: #64748b;">Gestiona pagos espec铆ficos y globales</p>
+                                <p style="color: #64748b;">Gestiona pagos específicos y globales</p>
                             </div>
                             <button id="new-payment-btn" style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                                 <div class="icon icon-add icon-sm"></div>
@@ -2610,11 +2610,11 @@
                     </div>
                     
                     <div id="payments-container">
-                        <!-- Los pagos se cargar谩n aqu铆 -->
+                        <!-- Los pagos se cargarán aquí -->
                     </div>
                 `;
                 
-                // Configurar bot贸n de nuevo pago
+                // Configurar botón de nuevo pago
                 document.getElementById('new-payment-btn').addEventListener('click', () => {
                     this.showNewPaymentModal();
                 });
@@ -2644,7 +2644,7 @@
                     if (todosPagos.length === 0) {
                         container.innerHTML = `
                             <div class="bg-white rounded-lg p-8 text-center">
-                                <div style="font-size: 3rem; margin-bottom: 16px;">馃挸</div>
+                                <div style="font-size: 3rem; margin-bottom: 16px;">💳</div>
                                 <h3 class="text-xl font-semibold mb-2">No hay pagos</h3>
                                 <p class="text-gray-500 mb-6">Registra tu primer pago para comenzar</p>
                                 <button id="add-first-payment" class="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium">
@@ -2659,7 +2659,7 @@
                         return;
                     }
                     
-                    // Ordenar por fecha (m谩s recientes primero)
+                    // Ordenar por fecha (más recientes primero)
                     todosPagos.sort((a, b) => new Date(b.fecha_pago) - new Date(a.fecha_pago));
                     
                     container.innerHTML = `
@@ -2670,7 +2670,7 @@
                                         <th>Fecha</th>
                                         <th>Empresa</th>
                                         <th>Tipo</th>
-                                        <th>M茅todo</th>
+                                        <th>Método</th>
                                         <th>Monto</th>
                                         <th>Estado</th>
                                         <th>Acciones</th>
@@ -2683,7 +2683,7 @@
                                             <td>${pago.empresa_nombre}</td>
                                             <td>
                                                 <span style="background: ${pago.tipo === 'especifico' ? '#f0f9ff' : '#f1f5f9'}; color: ${pago.tipo === 'especifico' ? '#0c4a6e' : '#475569'}; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 500;">
-                                                    ${pago.tipo === 'especifico' ? 'Espec铆fico' : 'Global'}
+                                                    ${pago.tipo === 'especifico' ? 'Específico' : 'Global'}
                                                 </span>
                                             </td>
                                             <td>${pago.metodo || 'No especificado'}</td>
@@ -2751,13 +2751,13 @@
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                         <input type="radio" name="payment-tipo" value="especifico" style="width: 16px; height: 16px;">
-                                        <span>Espec铆fico (para un contrato)</span>
+                                        <span>Específico (para un contrato)</span>
                                     </label>
                                 </div>
                             </div>
                             
                             <div id="contract-selection" style="margin-bottom: 20px; display: none;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Contrato espec铆fico *</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Contrato específico *</label>
                                 <select id="payment-contrato" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                     <option value="">Seleccionar contrato...</option>
                                 </select>
@@ -2774,12 +2774,12 @@
                             </div>
                             
                             <div style="margin-bottom: 20px;">
-                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">M茅todo de pago</label>
+                                <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Método de pago</label>
                                 <select id="payment-metodo" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                     <option value="transferencia">Transferencia bancaria</option>
                                     <option value="efectivo">Efectivo</option>
                                     <option value="cheque">Cheque</option>
-                                    <option value="tarjeta">Tarjeta de cr茅dito/d茅bito</option>
+                                    <option value="tarjeta">Tarjeta de crédito/débito</option>
                                     <option value="otro">Otro</option>
                                 </select>
                             </div>
@@ -2791,7 +2791,7 @@
                         </form>
                     `, 'Registrar Pago');
                     
-                    // Mostrar/ocultar selecci贸n de contrato seg煤n tipo
+                    // Mostrar/ocultar selección de contrato según tipo
                     modal.querySelectorAll('input[name="payment-tipo"]').forEach(radio => {
                         radio.addEventListener('change', (e) => {
                             const contractSelection = modal.querySelector('#contract-selection');
@@ -2856,7 +2856,7 @@
                         };
                         
                         if (!paymentData.monto_total || paymentData.monto_total <= 0) {
-                            this.showToast('Ingrese un monto v谩lido', 'error');
+                            this.showToast('Ingrese un monto válido', 'error');
                             saveBtn.disabled = false;
                             saveBtn.textContent = 'Registrar Pago';
                             return;
@@ -2897,7 +2897,7 @@
                     if (pago.distribuciones && pago.distribuciones.length > 0) {
                         distribucionesHTML = `
                             <div style="margin-bottom: 24px;">
-                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Distribuci贸n del pago</h3>
+                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Distribución del pago</h3>
                                 <div class="table-container">
                                     <table>
                                         <thead>
@@ -2935,19 +2935,19 @@
                                         <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Tipo</div>
                                         <div style="font-size: 1.125rem; font-weight: 600;">
                                             <span style="background: ${pago.tipo === 'especifico' ? '#f0f9ff' : '#f1f5f9'}; color: ${pago.tipo === 'especifico' ? '#0c4a6e' : '#475569'}; padding: 4px 12px; border-radius: 20px; font-size: 0.875rem; font-weight: 500;">
-                                                ${pago.tipo === 'especifico' ? 'Espec铆fico' : 'Global'}
+                                                ${pago.tipo === 'especifico' ? 'Específico' : 'Global'}
                                             </span>
                                         </div>
                                     </div>
                                     <div>
-                                        <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">M茅todo</div>
+                                        <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Método</div>
                                         <div style="font-size: 1.125rem; font-weight: 600;">${pago.metodo || 'No especificado'}</div>
                                     </div>
                                 </div>
                             </div>
                             
                             <div style="margin-bottom: 24px;">
-                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Informaci贸n del Pago</h3>
+                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Información del Pago</h3>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                                     <div>
                                         <div style="font-size: 0.875rem; color: #64748b;">Empresa</div>
@@ -2990,7 +2990,7 @@
             }
             
             async deletePayment(id) {
-                if (!confirm('驴Est谩s seguro de eliminar este pago?')) {
+                if (!confirm('¿Estás seguro de eliminar este pago?')) {
                     return;
                 }
                 
@@ -3024,7 +3024,7 @@
                                     <div class="icon icon-company icon-xl"></div>
                                 </div>
                                 <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 8px;">Reporte por Empresa</h3>
-                                <p style="color: #64748b; margin-bottom: 16px;">Genera un reporte detallado para una empresa espec铆fica</p>
+                                <p style="color: #64748b; margin-bottom: 16px;">Genera un reporte detallado para una empresa específica</p>
                                 <button id="generate-company-report" class="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium">
                                     Generar Reporte
                                 </button>
@@ -3054,7 +3054,7 @@
                         </div>
                         
                         <div id="report-results" class="mt-8" style="display: none;">
-                            <!-- Los resultados del reporte se mostrar谩n aqu铆 -->
+                            <!-- Los resultados del reporte se mostrarán aquí -->
                         </div>
                     </div>
                 `;
@@ -3094,11 +3094,11 @@
                         </div>
                         
                         <div style="margin-bottom: 20px;">
-                            <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Per铆odo</label>
+                            <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Período</label>
                             <select id="report-periodo" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                 <option value="mes">Este mes</option>
-                                <option value="anual">Este a帽o</option>
-                                <option value="todo">Todo el per铆odo</option>
+                                <option value="anual">Este año</option>
+                                <option value="todo">Todo el período</option>
                             </select>
                         </div>
                         
@@ -3399,7 +3399,7 @@
                             </div>
                             
                             <div style="background: #f8fafc; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
-                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Estad铆sticas</h3>
+                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Estadísticas</h3>
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
                                     <div>
                                         <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Monto Total</div>
@@ -3449,9 +3449,9 @@
                                             <tr>
                                                 <th>Mes</th>
                                                 <th>Monto Certificado</th>
-                                                <th>% Comisi贸n</th>
-                                                <th>Comisi贸n Calculada</th>
-                                                <th>Comisi贸n Editada</th>
+                                                <th>% Comisión</th>
+                                                <th>Comisión Calculada</th>
+                                                <th>Comisión Editada</th>
                                                 <th>Estado</th>
                                                 <th>Notas</th>
                                             </tr>
@@ -3487,7 +3487,7 @@
                                     <table>
                                         <thead>
                                             <tr>
-                                                <th>Descripci贸n</th>
+                                                <th>Descripción</th>
                                                 <th>Monto</th>
                                                 <th>Fecha</th>
                                             </tr>
@@ -3666,7 +3666,7 @@
                     if (reporte.tendenciaMensual && reporte.tendenciaMensual.length > 0) {
                         reportHTML += `
                             <div style="margin-bottom: 32px;">
-                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Tendencia Mensual (脷ltimos 6 meses)</h3>
+                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Tendencia Mensual (Últimos 6 meses)</h3>
                                 <div class="table-container">
                                     <table>
                                         <thead>
@@ -3762,16 +3762,16 @@
                 const content = document.getElementById('content-view');
                 content.innerHTML = `
                     <div style="margin-bottom: 32px;">
-                        <h1 style="font-size: 1.75rem; font-weight: 700; color: #1e293b; margin-bottom: 8px;">Configuraci贸n</h1>
+                        <h1 style="font-size: 1.75rem; font-weight: 700; color: #1e293b; margin-bottom: 8px;">Configuración</h1>
                         <p style="color: #64748b;">Personaliza tu experiencia</p>
                     </div>
                     <div style="background: white; border-radius: 12px; padding: 32px;">
                         <div style="margin-bottom: 24px;">
-                            <h2 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Sincronizaci贸n</h2>
+                            <h2 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Sincronización</h2>
                             <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #f1f5f9;">
                                 <div>
-                                    <div style="font-weight: 500;">Sincronizaci贸n autom谩tica</div>
-                                    <div style="font-size: 0.875rem; color: #64748b;">Sincronizar cambios autom谩ticamente</div>
+                                    <div style="font-weight: 500;">Sincronización automática</div>
+                                    <div style="font-size: 0.875rem; color: #64748b;">Sincronizar cambios automáticamente</div>
                                 </div>
                                 <label style="position: relative; display: inline-block; width: 44px; height: 24px;">
                                     <input type="checkbox" id="auto-sync" ${syncManager.config.autoSync ? 'checked' : ''} style="opacity: 0; width: 0; height: 0;">
@@ -3787,13 +3787,13 @@
                                 <select id="theme-select" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
                                     <option value="light" ${profile?.config_tema === 'light' ? 'selected' : ''}>Claro</option>
                                     <option value="dark" ${profile?.config_tema === 'dark' ? 'selected' : ''}>Oscuro</option>
-                                    <option value="auto" ${(!profile?.config_tema || profile.config_tema === 'auto') ? 'selected' : ''}>Autom谩tico</option>
+                                    <option value="auto" ${(!profile?.config_tema || profile.config_tema === 'auto') ? 'selected' : ''}>Automático</option>
                                 </select>
                             </div>
                             <div>
                                 <label style="display: block; font-weight: 500; margin-bottom: 8px;">Moneda</label>
                                 <select id="currency-select" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
-                                    <option value="USD" ${profile?.config_moneda === 'USD' ? 'selected' : ''}>USD - D贸lar</option>
+                                    <option value="USD" ${profile?.config_moneda === 'USD' ? 'selected' : ''}>USD - Dólar</option>
                                     <option value="CUP" ${profile?.config_moneda === 'CUP' ? 'selected' : ''}>CUP - Peso Cubano</option>
                                     <option value="MXN" ${profile?.config_moneda === 'MXN' ? 'selected' : ''}>MXN - Peso Mexicano</option>
                                 </select>
@@ -3819,18 +3819,18 @@
                         });
                         
                         if (result.success) {
-                            this.showToast('Configuraci贸n guardada', 'success');
+                            this.showToast('Configuración guardada', 'success');
                             // Aplicar tema
                             document.documentElement.setAttribute('data-theme', theme === 'auto' ? 
                                 (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme);
                             
-                            // Configurar sincronizaci贸n autom谩tica
+                            // Configurar sincronización automática
                             syncManager.updateConfig({ autoSync });
                         } else {
-                            this.showToast('Error al guardar configuraci贸n', 'error');
+                            this.showToast('Error al guardar configuración', 'error');
                         }
                     } catch (error) {
-                        this.showToast('Error al guardar configuraci贸n', 'error');
+                        this.showToast('Error al guardar configuración', 'error');
                     }
                 });
             }
@@ -3842,7 +3842,7 @@
                 content.innerHTML = `
                     <div style="margin-bottom: 32px;">
                         <h1 style="font-size: 1.75rem; font-weight: 700; color: #1e293b; margin-bottom: 8px;">Mi Perfil</h1>
-                        <p style="color: #64748b;">Administra tu informaci贸n personal</p>
+                        <p style="color: #64748b;">Administra tu información personal</p>
                     </div>
                     
                     <div style="background: white; border-radius: 12px; padding: 32px;">
@@ -3856,7 +3856,7 @@
                                 <div style="margin-top: 12px;">
                                     <span style="background: #fef3c7; color: #92400e; padding: 8px 16px; border-radius: 20px; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 8px;">
                                         <span class="icon icon-warning icon-sm"></span>
-                                        Email pendiente de confirmaci贸n
+                                        Email pendiente de confirmación
                                     </span>
                                 </div>
                             ` : ''}
@@ -3864,7 +3864,7 @@
                         
                         <form id="profile-form">
                             <div style="margin-bottom: 24px;">
-                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Informaci贸n personal</h3>
+                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Información personal</h3>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                                     <div>
                                         <label style="display: block; font-weight: 500; margin-bottom: 8px;">Nombre</label>
@@ -3878,19 +3878,19 @@
                             </div>
                             
                             <div style="margin-bottom: 32px;">
-                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Cambiar contrase帽a</h3>
+                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 16px;">Cambiar contraseña</h3>
                                 <div style="display: grid; grid-template-columns: 1fr; gap: 16px;">
                                     <div>
-                                        <label style="display: block; font-weight: 500; margin-bottom: 8px;">Contrase帽a actual</label>
-                                        <input type="password" id="current-password" placeholder="鈥⑩€⑩€⑩€⑩€⑩€⑩€⑩€? style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                                        <label style="display: block; font-weight: 500; margin-bottom: 8px;">Contraseña actual</label>
+                                        <input type="password" id="current-password" placeholder="••••••••" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
                                     </div>
                                     <div>
-                                        <label style="display: block; font-weight: 500; margin-bottom: 8px;">Nueva contrase帽a</label>
-                                        <input type="password" id="new-password" placeholder="鈥⑩€⑩€⑩€⑩€⑩€⑩€⑩€? style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                                        <label style="display: block; font-weight: 500; margin-bottom: 8px;">Nueva contraseña</label>
+                                        <input type="password" id="new-password" placeholder="••••••••" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
                                     </div>
                                     <div>
-                                        <label style="display: block; font-weight: 500; margin-bottom: 8px;">Confirmar nueva contrase帽a</label>
-                                        <input type="password" id="confirm-password" placeholder="鈥⑩€⑩€⑩€⑩€⑩€⑩€⑩€? style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                                        <label style="display: block; font-weight: 500; margin-bottom: 8px;">Confirmar nueva contraseña</label>
+                                        <input type="password" id="confirm-password" placeholder="••••••••" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
                                     </div>
                                 </div>
                             </div>
@@ -3933,17 +3933,17 @@
                             return;
                         }
                         
-                        // Cambiar contrase帽a si se proporcion贸
+                        // Cambiar contraseña si se proporcionó
                         if (currentPassword && newPassword && confirmPassword) {
                             if (newPassword !== confirmPassword) {
-                                this.showToast('Las nuevas contrase帽as no coinciden', 'error');
+                                this.showToast('Las nuevas contraseñas no coinciden', 'error');
                                 btn.disabled = false;
                                 btn.textContent = 'Guardar cambios';
                                 return;
                             }
                             
                             if (newPassword.length < 6) {
-                                this.showToast('La nueva contrase帽a debe tener al menos 6 caracteres', 'error');
+                                this.showToast('La nueva contraseña debe tener al menos 6 caracteres', 'error');
                                 btn.disabled = false;
                                 btn.textContent = 'Guardar cambios';
                                 return;
@@ -3969,7 +3969,7 @@
                 });
                 
                 document.getElementById('delete-account')?.addEventListener('click', async () => {
-                    if (confirm('驴Est谩s seguro de eliminar tu cuenta? Esta acci贸n eliminar谩 todos tus datos y no se puede deshacer.')) {
+                    if (confirm('¿Estás seguro de eliminar tu cuenta? Esta acción eliminará todos tus datos y no se puede deshacer.')) {
                         const result = await supabaseManager.deleteAccount();
                         if (result.success) {
                             this.showToast('Cuenta eliminada correctamente', 'success');
@@ -4079,15 +4079,15 @@
                 toast.innerHTML = `
                     <div class="icon icon-${config.icon} icon-sm" style="flex-shrink: 0;"></div>
                     <div style="flex: 1;">${message}</div>
-                    <button style="background: none; border: none; color: inherit; cursor: pointer; padding: 4px; font-size: 1.25rem;">脳</button>
+                    <button style="background: none; border: none; color: inherit; cursor: pointer; padding: 4px; font-size: 1.25rem;">×</button>
                 `;
                 
                 container.appendChild(toast);
                 
-                // Configurar bot贸n de cierre
+                // Configurar botón de cierre
                 toast.querySelector('button').onclick = () => toast.remove();
                 
-                // Auto-eliminar despu茅s de 5 segundos
+                // Auto-eliminar después de 5 segundos
                 setTimeout(() => {
                     if (toast.parentNode) {
                         toast.remove();
@@ -4100,11 +4100,11 @@
                 app.innerHTML = `
                     <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: #f8fafc;">
                         <div style="text-align: center;">
-                            <div style="font-size: 4rem; margin-bottom: 20px;">鈿狅笍</div>
+                            <div style="font-size: 4rem; margin-bottom: 20px;">⚠️</div>
                             <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 12px; color: #1e293b;">Error</h2>
                             <p style="color: #64748b; margin-bottom: 24px; max-width: 400px;">${message}</p>
                             <button onclick="location.reload()" style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 500; cursor: pointer;">
-                                Recargar aplicaci贸n
+                                Recargar aplicación
                             </button>
                         </div>
                     </div>
@@ -4112,7 +4112,7 @@
             }
         }
         
-        // Inicializar aplicaci贸n
+        // Inicializar aplicación
         document.addEventListener('DOMContentLoaded', async () => {
             window.app = new CommissionManagerApp();
             await window.app.init();
@@ -4122,8 +4122,8 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./service-worker.js')
-                    .then(() => console.log('鉁?Service Worker registrado'))
-                    .catch(err => console.log('鉂?Service Worker no registrado:', err));
+                    .then(() => console.log('✅ Service Worker registrado'))
+                    .catch(err => console.log('❌ Service Worker no registrado:', err));
             });
         }
         
