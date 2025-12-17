@@ -1111,7 +1111,7 @@
             
             async getDashboardStats() {
                 try {
-                    const empresas = await supabaseManager.getEmpresas();
+                    const empresas = await this.getEmpresas();
                     const stats = await this.calculateStats(empresas);
                     return stats;
                 } catch (error) {
@@ -1299,13 +1299,32 @@
                 }
                 
                 try {
-                    const result = await supabaseManager.createEmpresa(companyData);
-                    if (result.success) {
-                        this.showToast('Empresa creada correctamente', 'success');
+                    // Primero guardar localmente
+                    const localResult = await localDB.add('empresas', {
+                        ...companyData,
+                        user_id: this.currentUser.id,
+                        sync_status: 'pending',
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    });
+                    
+                    if (localResult) {
+                        this.showToast('Empresa creada localmente', 'success');
                         modal.remove();
-                        await this.loadView('companies');
+                        
+                        // Intentar sincronizar con Supabase
+                        try {
+                            const syncResult = await syncManager.sync();
+                            if (syncResult.success) {
+                                this.showToast('Empresa sincronizada con el servidor', 'success');
+                            }
+                        } catch (syncError) {
+                            console.log('Empresa guardada localmente, se sincronizará más tarde');
+                        }
+                        
+                        await this.loadCompaniesList();
                     } else {
-                        this.showToast(result.error || 'Error al crear empresa', 'error');
+                        this.showToast('Error al guardar empresa localmente', 'error');
                         saveBtn.disabled = false;
                         saveBtn.textContent = 'Guardar Empresa';
                     }
@@ -1351,7 +1370,7 @@
                 if (!container) return;
                 
                 try {
-                    const empresas = await supabaseManager.getEmpresas();
+                    const empresas = await this.getEmpresas();
                     
                     if (empresas.length === 0) {
                         container.innerHTML = `
@@ -1429,6 +1448,15 @@
                 }
             }
             
+            async getEmpresas() {
+                try {
+                    return await localDB.getAll('empresas');
+                } catch (error) {
+                    console.error('Error obteniendo empresas:', error);
+                    return [];
+                }
+            }
+            
             async showEditCompanyModal(id) {
                 try {
                     const empresa = await localDB.get('empresas', id);
@@ -1495,7 +1523,9 @@
                     director: modal.querySelector('#edit-company-director').value.trim(),
                     comision_default: parseFloat(modal.querySelector('#edit-company-comision').value) || 1.00,
                     descripcion: modal.querySelector('#edit-company-descripcion').value.trim(),
-                    estado: modal.querySelector('input[name="edit-company-estado"]:checked').value
+                    estado: modal.querySelector('input[name="edit-company-estado"]:checked').value,
+                    updated_at: new Date().toISOString(),
+                    sync_status: 'pending'
                 };
                 
                 if (!companyData.nombre) {
@@ -1506,13 +1536,21 @@
                 }
                 
                 try {
-                    const result = await supabaseManager.updateEmpresa(id, companyData);
-                    if (result.success) {
+                    const result = await localDB.update('empresas', id, companyData);
+                    if (result) {
                         this.showToast('Empresa actualizada correctamente', 'success');
                         modal.remove();
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Cambios guardados localmente, se sincronizarán más tarde');
+                        }
+                        
                         await this.loadCompaniesList();
                     } else {
-                        this.showToast(result.error || 'Error al actualizar empresa', 'error');
+                        this.showToast('Error al actualizar empresa', 'error');
                         saveBtn.disabled = false;
                         saveBtn.textContent = 'Guardar Cambios';
                     }
@@ -1530,13 +1568,26 @@
                 }
                 
                 try {
-                    const result = await supabaseManager.deleteEmpresa(id);
-                    
-                    if (result.success) {
-                        this.showToast('Empresa eliminada correctamente', 'success');
+                    const empresa = await localDB.get('empresas', id);
+                    if (empresa) {
+                        // Marcar como eliminado en lugar de borrar físicamente
+                        await localDB.update('empresas', id, {
+                            sync_status: 'deleted',
+                            deleted_at: new Date().toISOString()
+                        });
+                        
+                        this.showToast('Empresa marcada para eliminación', 'success');
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Cambios guardados localmente, se sincronizarán más tarde');
+                        }
+                        
                         await this.loadCompaniesList();
                     } else {
-                        this.showToast(result.error || 'Error al eliminar empresa', 'error');
+                        this.showToast('Empresa no encontrada', 'error');
                     }
                 } catch (error) {
                     console.error('Error eliminando empresa:', error);
@@ -1579,7 +1630,7 @@
                 
                 try {
                     // Obtener empresas primero para seleccionar
-                    const empresas = await supabaseManager.getEmpresas();
+                    const empresas = await this.getEmpresas();
                     
                     if (empresas.length === 0) {
                         container.innerHTML = `
@@ -1601,7 +1652,7 @@
                     
                     let todosContratos = [];
                     for (const empresa of empresas) {
-                        const contratos = await supabaseManager.getContratosByEmpresa(empresa.id);
+                        const contratos = await localDB.getContratosByEmpresa(empresa.id);
                         contratos.forEach(contrato => {
                             contrato.empresa_nombre = empresa.nombre;
                         });
@@ -1812,7 +1863,11 @@
                     fecha_fin: modal.querySelector('#contract-fecha-fin').value || null,
                     comision_personalizada: modal.querySelector('#contract-comision').value ? parseFloat(modal.querySelector('#contract-comision').value) : null,
                     notas: modal.querySelector('#contract-notas').value.trim(),
-                    estado: modal.querySelector('input[name="contract-estado"]:checked').value
+                    estado: modal.querySelector('input[name="contract-estado"]:checked').value,
+                    user_id: this.currentUser.id,
+                    sync_status: 'pending',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
                 };
                 
                 if (!contratoData.nombre || !contratoData.numero_contrato || !contratoData.monto_base) {
@@ -1823,13 +1878,21 @@
                 }
                 
                 try {
-                    const result = await supabaseManager.createContrato(contratoData);
-                    if (result.success) {
+                    const result = await localDB.add('contratos', contratoData);
+                    if (result) {
                         this.showToast('Contrato creado correctamente', 'success');
                         modal.remove();
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Contrato guardado localmente, se sincronizará más tarde');
+                        }
+                        
                         await this.loadContractsList();
                     } else {
-                        this.showToast(result.error || 'Error al crear contrato', 'error');
+                        this.showToast('Error al crear contrato', 'error');
                         saveBtn.disabled = false;
                         saveBtn.textContent = 'Guardar Contrato';
                     }
@@ -1843,7 +1906,7 @@
             
             async showSelectCompanyModal() {
                 return new Promise(async (resolve) => {
-                    const empresas = await supabaseManager.getEmpresas();
+                    const empresas = await this.getEmpresas();
                     
                     if (empresas.length === 0) {
                         this.showToast('Primero necesitas crear una empresa', 'error');
@@ -2047,7 +2110,9 @@
                     fecha_fin: modal.querySelector('#edit-contract-fecha-fin').value || null,
                     comision_personalizada: modal.querySelector('#edit-contract-comision').value ? parseFloat(modal.querySelector('#edit-contract-comision').value) : null,
                     notas: modal.querySelector('#edit-contract-notas').value.trim(),
-                    estado: modal.querySelector('input[name="edit-contract-estado"]:checked').value
+                    estado: modal.querySelector('input[name="edit-contract-estado"]:checked').value,
+                    updated_at: new Date().toISOString(),
+                    sync_status: 'pending'
                 };
                 
                 if (!contratoData.nombre || !contratoData.numero_contrato || !contratoData.monto_base) {
@@ -2058,13 +2123,21 @@
                 }
                 
                 try {
-                    const result = await contratosManager.updateContrato(id, contratoData);
-                    if (result.success) {
+                    const result = await localDB.update('contratos', id, contratoData);
+                    if (result) {
                         this.showToast('Contrato actualizado correctamente', 'success');
                         modal.remove();
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Cambios guardados localmente, se sincronizarán más tarde');
+                        }
+                        
                         await this.loadContractsList();
                     } else {
-                        this.showToast(result.error || 'Error al actualizar contrato', 'error');
+                        this.showToast('Error al actualizar contrato', 'error');
                         saveBtn.disabled = false;
                         saveBtn.textContent = 'Guardar Cambios';
                     }
@@ -2082,13 +2155,26 @@
                 }
                 
                 try {
-                    const result = await contratosManager.deleteContrato(id);
-                    
-                    if (result.success) {
-                        this.showToast('Contrato eliminado correctamente', 'success');
+                    const contrato = await localDB.get('contratos', id);
+                    if (contrato) {
+                        // Marcar como eliminado
+                        await localDB.update('contratos', id, {
+                            sync_status: 'deleted',
+                            deleted_at: new Date().toISOString()
+                        });
+                        
+                        this.showToast('Contrato marcado para eliminación', 'success');
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Cambios guardados localmente, se sincronizarán más tarde');
+                        }
+                        
                         await this.loadContractsList();
                     } else {
-                        this.showToast(result.error || 'Error al eliminar contrato', 'error');
+                        this.showToast('Contrato no encontrado', 'error');
                     }
                 } catch (error) {
                     console.error('Error eliminando contrato:', error);
@@ -2311,7 +2397,11 @@
                     porcentaje_comision: parseFloat(modal.querySelector('#certification-porcentaje').value) || 1.00,
                     comision_editada: modal.querySelector('#certification-comision-editada').value ? parseFloat(modal.querySelector('#certification-comision-editada').value) : null,
                     pagado: modal.querySelector('#certification-pagado').checked,
-                    notas: modal.querySelector('#certification-notas').value.trim()
+                    notas: modal.querySelector('#certification-notas').value.trim(),
+                    user_id: this.currentUser.id,
+                    sync_status: 'pending',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
                 };
                 
                 if (!certificationData.monto_certificado) {
@@ -2322,13 +2412,21 @@
                 }
                 
                 try {
-                    const result = await supabaseManager.createCertificacion(certificationData);
-                    if (result.success) {
+                    const result = await localDB.add('certificaciones', certificationData);
+                    if (result) {
                         this.showToast('Certificación creada correctamente', 'success');
                         modal.remove();
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Certificación guardada localmente, se sincronizará más tarde');
+                        }
+                        
                         await this.loadCertificationsList();
                     } else {
-                        this.showToast(result.error || 'Error al crear certificación', 'error');
+                        this.showToast('Error al crear certificación', 'error');
                         saveBtn.disabled = false;
                         saveBtn.textContent = 'Guardar Certificación';
                     }
@@ -2342,7 +2440,7 @@
             
             async showSelectContractModal() {
                 return new Promise(async (resolve) => {
-                    const empresas = await supabaseManager.getEmpresas();
+                    const empresas = await this.getEmpresas();
                     
                     if (empresas.length === 0) {
                         this.showToast('Primero necesitas crear una empresa', 'error');
@@ -2353,7 +2451,7 @@
                     // Obtener todos los contratos
                     let todosContratos = [];
                     for (const empresa of empresas) {
-                        const contratos = await supabaseManager.getContratosByEmpresa(empresa.id);
+                        const contratos = await localDB.getContratosByEmpresa(empresa.id);
                         contratos.forEach(contrato => {
                             contrato.empresa_nombre = empresa.nombre;
                         });
@@ -2488,7 +2586,9 @@
                     porcentaje_comision: parseFloat(modal.querySelector('#edit-certification-porcentaje').value) || 1.00,
                     comision_editada: modal.querySelector('#edit-certification-comision-editada').value ? parseFloat(modal.querySelector('#edit-certification-comision-editada').value) : null,
                     pagado: modal.querySelector('#edit-certification-pagado').checked,
-                    notas: modal.querySelector('#edit-certification-notas').value.trim()
+                    notas: modal.querySelector('#edit-certification-notas').value.trim(),
+                    updated_at: new Date().toISOString(),
+                    sync_status: 'pending'
                 };
                 
                 if (!certificationData.monto_certificado) {
@@ -2499,13 +2599,21 @@
                 }
                 
                 try {
-                    const result = await certificacionesManager.updateCertificacion(id, certificationData);
-                    if (result.success) {
+                    const result = await localDB.update('certificaciones', id, certificationData);
+                    if (result) {
                         this.showToast('Certificación actualizada correctamente', 'success');
                         modal.remove();
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Cambios guardados localmente, se sincronizarán más tarde');
+                        }
+                        
                         await this.loadCertificationsList();
                     } else {
-                        this.showToast(result.error || 'Error al actualizar certificación', 'error');
+                        this.showToast('Error al actualizar certificación', 'error');
                         saveBtn.disabled = false;
                         saveBtn.textContent = 'Guardar Cambios';
                     }
@@ -2523,13 +2631,26 @@
                 }
                 
                 try {
-                    const result = await certificacionesManager.deleteCertificacion(id);
-                    
-                    if (result.success) {
-                        this.showToast('Certificación eliminada correctamente', 'success');
+                    const certificacion = await localDB.get('certificaciones', id);
+                    if (certificacion) {
+                        // Marcar como eliminado
+                        await localDB.update('certificaciones', id, {
+                            sync_status: 'deleted',
+                            deleted_at: new Date().toISOString()
+                        });
+                        
+                        this.showToast('Certificación marcada para eliminación', 'success');
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Cambios guardados localmente, se sincronizarán más tarde');
+                        }
+                        
                         await this.loadCertificationsList();
                     } else {
-                        this.showToast(result.error || 'Error al eliminar certificación', 'error');
+                        this.showToast('Certificación no encontrada', 'error');
                     }
                 } catch (error) {
                     console.error('Error eliminando certificación:', error);
@@ -2572,12 +2693,12 @@
                 
                 try {
                     // Obtener todas las empresas
-                    const empresas = await supabaseManager.getEmpresas();
+                    const empresas = await this.getEmpresas();
                     
                     // Obtener pagos de todas las empresas
                     let todosPagos = [];
                     for (const empresa of empresas) {
-                        const pagos = await pagosManager.getPagos();
+                        const pagos = await localDB.getAllByIndex('pagos', 'empresa_id', empresa.id);
                         pagos.forEach(pago => {
                             pago.empresa_nombre = empresa.nombre;
                         });
@@ -2758,7 +2879,7 @@
                 select.innerHTML = '<option value="">Seleccionar contrato...</option>';
                 
                 try {
-                    const contratos = await supabaseManager.getContratosByEmpresa(empresaId);
+                    const contratos = await localDB.getContratosByEmpresa(empresaId);
                     contratos.forEach(contrato => {
                         const option = document.createElement('option');
                         option.value = contrato.id;
@@ -2792,7 +2913,11 @@
                     fecha_pago: modal.querySelector('#payment-fecha').value,
                     monto_total: parseFloat(modal.querySelector('#payment-monto').value) || 0,
                     metodo: modal.querySelector('#payment-metodo').value,
-                    notas: modal.querySelector('#payment-notas').value.trim()
+                    notas: modal.querySelector('#payment-notas').value.trim(),
+                    user_id: this.currentUser.id,
+                    sync_status: 'pending',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
                 };
                 
                 if (!paymentData.monto_total || paymentData.monto_total <= 0) {
@@ -2803,13 +2928,21 @@
                 }
                 
                 try {
-                    const result = await supabaseManager.createPago(paymentData);
-                    if (result.success) {
+                    const result = await localDB.add('pagos', paymentData);
+                    if (result) {
                         this.showToast('Pago registrado correctamente', 'success');
                         modal.remove();
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Pago guardado localmente, se sincronizará más tarde');
+                        }
+                        
                         await this.loadPaymentsList();
                     } else {
-                        this.showToast(result.error || 'Error al registrar pago', 'error');
+                        this.showToast('Error al registrar pago', 'error');
                         saveBtn.disabled = false;
                         saveBtn.textContent = 'Registrar Pago';
                     }
@@ -2823,7 +2956,7 @@
             
             async viewPayment(id) {
                 try {
-                    const pago = await pagosManager.getPago(id);
+                    const pago = await localDB.get('pagos', id);
                     if (!pago) {
                         this.showToast('Pago no encontrado', 'error');
                         return;
@@ -2902,13 +3035,26 @@
                 }
                 
                 try {
-                    const result = await pagosManager.deletePago(id);
-                    
-                    if (result.success) {
-                        this.showToast('Pago eliminado correctamente', 'success');
+                    const pago = await localDB.get('pagos', id);
+                    if (pago) {
+                        // Marcar como eliminado
+                        await localDB.update('pagos', id, {
+                            sync_status: 'deleted',
+                            deleted_at: new Date().toISOString()
+                        });
+                        
+                        this.showToast('Pago marcado para eliminación', 'success');
+                        
+                        // Intentar sincronizar
+                        try {
+                            await syncManager.sync();
+                        } catch (syncError) {
+                            console.log('Cambios guardados localmente, se sincronizarán más tarde');
+                        }
+                        
                         await this.loadPaymentsList();
                     } else {
-                        this.showToast(result.error || 'Error al eliminar pago', 'error');
+                        this.showToast('Pago no encontrado', 'error');
                     }
                 } catch (error) {
                     console.error('Error eliminando pago:', error);
@@ -2981,7 +3127,7 @@
             }
             
             async showCompanyReportModal() {
-                const empresas = await supabaseManager.getEmpresas();
+                const empresas = await this.getEmpresas();
                 
                 if (empresas.length === 0) {
                     this.showToast('Primero necesitas crear una empresa', 'error');
@@ -3042,7 +3188,7 @@
             }
             
             async showContractReportModal() {
-                const empresas = await supabaseManager.getEmpresas();
+                const empresas = await this.getEmpresas();
                 
                 if (empresas.length === 0) {
                     this.showToast('Primero necesitas crear una empresa', 'error');
@@ -3086,7 +3232,7 @@
                         contractSelect.innerHTML = '<option value="">Cargando contratos...</option>';
                         
                         try {
-                            const contratos = await supabaseManager.getContratosByEmpresa(empresaId);
+                            const contratos = await localDB.getContratosByEmpresa(empresaId);
                             contractSelect.innerHTML = '<option value="">Seleccionar contrato...</option>';
                             
                             if (contratos.length === 0) {
