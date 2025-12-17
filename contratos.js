@@ -1,6 +1,5 @@
 // Sistema de gestión de contratos - Commission Manager Pro
 import { localDB } from './db.js';
-import { supabaseManager } from './supabase.js';
 
 class ContratosManager {
   constructor() {
@@ -20,7 +19,16 @@ class ContratosManager {
     }
 
     try {
-      const contratoId = `con_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Verificar que la empresa existe
+      const empresa = await localDB.get('empresas', this.currentEmpresa);
+      if (!empresa) {
+        return {
+          success: false,
+          error: 'Empresa no encontrada'
+        };
+      }
+
+      const contratoId = this.generateValidUUID();
       
       const contratoCompleto = {
         id: contratoId,
@@ -28,30 +36,25 @@ class ContratosManager {
         ...contratoData,
         estado: contratoData.estado || 'activo',
         comision_personalizada: contratoData.comision_personalizada || null,
+        monto_base: parseFloat(contratoData.monto_base) || 0,
         fecha_creacion: new Date().toISOString(),
         fecha_actualizacion: new Date().toISOString()
       };
 
       // Validaciones
-      if (!contratoCompleto.numero_contrato) {
+      if (!contratoCompleto.numero_contrato || contratoCompleto.numero_contrato.trim() === '') {
         return { success: false, error: 'Número de contrato es requerido' };
       }
-      if (!contratoCompleto.nombre) {
+      if (!contratoCompleto.nombre || contratoCompleto.nombre.trim() === '') {
         return { success: false, error: 'Nombre del contrato es requerido' };
       }
       if (!contratoCompleto.monto_base || contratoCompleto.monto_base <= 0) {
         return { success: false, error: 'Monto base debe ser mayor a 0' };
       }
 
-      // Formatear monto base
-      contratoCompleto.monto_base = parseFloat(contratoCompleto.monto_base);
-
       // Guardar localmente
       await localDB.add('contratos', contratoCompleto);
       
-      // Agregar a cola de sincronización
-      await localDB.addToSyncQueue('INSERT', 'contratos', contratoId, contratoCompleto);
-
       return {
         success: true,
         contrato: contratoCompleto,
@@ -64,6 +67,14 @@ class ContratosManager {
         error: error.message
       };
     }
+  }
+
+  generateValidUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
   }
 
   async getContratos() {
@@ -107,8 +118,12 @@ class ContratosManager {
         fecha_actualizacion: new Date().toISOString()
       };
 
+      // Validar campos numéricos
+      if (contratoData.monto_base !== undefined) {
+        updatedData.monto_base = parseFloat(contratoData.monto_base);
+      }
+
       await localDB.update('contratos', updatedData);
-      await localDB.addToSyncQueue('UPDATE', 'contratos', id, updatedData);
 
       return {
         success: true,
@@ -144,7 +159,6 @@ class ContratosManager {
       }
 
       await localDB.delete('contratos', id);
-      await localDB.addToSyncQueue('DELETE', 'contratos', id, contrato);
 
       return {
         success: true,
@@ -211,7 +225,7 @@ class ContratosManager {
     const año = fecha.getFullYear();
     const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
     const dia = fecha.getDate().toString().padStart(2, '0');
-    const random = Math.random().toString(36).substr(2, 4).toUpperCase();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     
     const siglas = empresaNombre
       .split(' ')
