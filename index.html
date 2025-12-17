@@ -160,6 +160,41 @@
         .fade-in {
             animation: fadeIn 0.3s ease;
         }
+        
+        /* Estilos para validación */
+        .validation-message {
+            font-size: 0.75rem;
+            margin-top: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .validation-error {
+            background-color: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+        }
+        
+        .validation-success {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+        
+        .validation-warning {
+            background-color: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+        }
+        
+        input.invalid {
+            border-color: #dc2626 !important;
+        }
+        
+        input.valid {
+            border-color: #16a34a !important;
+        }
     </style>
 </head>
 <body>
@@ -1801,13 +1836,38 @@
                     const certificaciones = await localDB.getCertificacionesByContrato(contratoId);
                     const suplementos = await localDB.getAllByIndex('suplementos', 'contrato_id', contratoId);
                     
+                    // Obtener pagos para calcular saldo disponible
+                    const pagosGlobales = await localDB.getAllByIndex('pagos', 'empresa_id', contrato.empresa_id);
+                    const pagosEspecificos = await localDB.getAllByIndex('pagos', 'contrato_id', contratoId);
+                    
+                    // Calcular total pagado al contrato
+                    let totalPagado = 0;
+                    
+                    // Sumar pagos específicos
+                    totalPagado += pagosEspecificos.reduce((sum, pago) => sum + (pago.monto_total || 0), 0);
+                    
+                    // Sumar distribución de pagos globales
+                    for (const pago of pagosGlobales) {
+                        if (pago.distribuciones && Array.isArray(pago.distribuciones)) {
+                            const distribucionContrato = pago.distribuciones.find(d => d.contrato_id === contratoId);
+                            if (distribucionContrato) {
+                                totalPagado += distribucionContrato.monto_asignado || 0;
+                            }
+                        }
+                    }
+                    
                     // Calcular estadísticas
                     const montoSuplementos = suplementos.reduce((sum, s) => sum + (s.monto || 0), 0);
+                    const montoTotalContrato = contrato.monto_base + montoSuplementos;
                     const montoCertificado = certificaciones.reduce((sum, c) => sum + (c.monto_certificado || 0), 0);
                     const comisiones = certificaciones.reduce((sum, c) => sum + (c.comision_editada || c.comision_calculada || 0), 0);
                     const comisionesPagadas = certificaciones
                         .filter(c => c.pagado)
                         .reduce((sum, c) => sum + (c.comision_editada || c.comision_calculada || 0), 0);
+                    const comisionesPendientes = comisiones - comisionesPagadas;
+                    
+                    // Calcular saldo disponible (lo que se ha pagado menos las comisiones ya pagadas)
+                    const saldoDisponible = totalPagado - comisionesPagadas;
                     
                     const modal = this.createModal(`Contrato: ${contrato.nombre}`, `
                         <div style="max-height: 70vh; overflow-y: auto;">
@@ -1815,7 +1875,7 @@
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
                                     <div>
                                         <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Monto Total</div>
-                                        <div style="font-size: 1.25rem; font-weight: 600;">${this.formatCurrency(contrato.monto_base + montoSuplementos)}</div>
+                                        <div style="font-size: 1.25rem; font-weight: 600;">${this.formatCurrency(montoTotalContrato)}</div>
                                     </div>
                                     <div>
                                         <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Certificado</div>
@@ -1823,11 +1883,32 @@
                                     </div>
                                     <div>
                                         <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Avance</div>
-                                        <div style="font-size: 1.25rem; font-weight: 600;">${contrato.monto_base > 0 ? ((montoCertificado / contrato.monto_base) * 100).toFixed(2) : '0'}%</div>
+                                        <div style="font-size: 1.25rem; font-weight: 600;">${montoTotalContrato > 0 ? ((montoCertificado / montoTotalContrato) * 100).toFixed(2) : '0'}%</div>
                                     </div>
                                     <div>
                                         <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Comisiones</div>
                                         <div style="font-size: 1.25rem; font-weight: 600;">${this.formatCurrency(comisiones)}</div>
+                                    </div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Comisiones Pagadas</div>
+                                        <div style="font-size: 1.25rem; font-weight: 600; color: #16a34a;">${this.formatCurrency(comisionesPagadas)}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Comisiones Pendientes</div>
+                                        <div style="font-size: 1.25rem; font-weight: 600; color: #ef4444;">${this.formatCurrency(comisionesPendientes)}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Total Pagado</div>
+                                        <div style="font-size: 1.25rem; font-weight: 600;">${this.formatCurrency(totalPagado)}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b; margin-bottom: 4px;">Saldo Disponible</div>
+                                        <div style="font-size: 1.25rem; font-weight: 600; color: ${saldoDisponible >= 0 ? '#16a34a' : '#ef4444'}">
+                                            ${this.formatCurrency(saldoDisponible)}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1848,6 +1929,10 @@
                                         <div style="font-weight: 500;">${this.formatCurrency(contrato.monto_base)}</div>
                                     </div>
                                     <div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Suplementos</div>
+                                        <div style="font-weight: 500;">${this.formatCurrency(montoSuplementos)}</div>
+                                    </div>
+                                    <div>
                                         <div style="font-size: 0.875rem; color: #64748b;">Comisión</div>
                                         <div style="font-weight: 500;">${contrato.comision_personalizada || empresa?.comision_default || 1}%</div>
                                     </div>
@@ -1862,6 +1947,10 @@
                                     <div>
                                         <div style="font-size: 0.875rem; color: #64748b;">Fecha Inicio</div>
                                         <div style="font-weight: 500;">${contrato.fecha_inicio ? new Date(contrato.fecha_inicio).toLocaleDateString('es-ES') : '-'}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Fecha Fin</div>
+                                        <div style="font-weight: 500;">${contrato.fecha_fin ? new Date(contrato.fecha_fin).toLocaleDateString('es-ES') : '-'}</div>
                                     </div>
                                 </div>
                             </div>
@@ -1965,6 +2054,36 @@
                     }
                     
                     const empresa = await localDB.get('empresas', contrato.empresa_id);
+                    const certificaciones = await localDB.getCertificacionesByContrato(id);
+                    const suplementos = await localDB.getAllByIndex('suplementos', 'contrato_id', id);
+                    
+                    // Obtener pagos para calcular saldo disponible
+                    const pagosGlobales = await localDB.getAllByIndex('pagos', 'empresa_id', contrato.empresa_id);
+                    const pagosEspecificos = await localDB.getAllByIndex('pagos', 'contrato_id', id);
+                    
+                    // Calcular total pagado al contrato
+                    let totalPagado = 0;
+                    
+                    // Sumar pagos específicos
+                    totalPagado += pagosEspecificos.reduce((sum, pago) => sum + (pago.monto_total || 0), 0);
+                    
+                    // Sumar distribución de pagos globales
+                    for (const pago of pagosGlobales) {
+                        if (pago.distribuciones && Array.isArray(pago.distribuciones)) {
+                            const distribucionContrato = pago.distribuciones.find(d => d.contrato_id === id);
+                            if (distribucionContrato) {
+                                totalPagado += distribucionContrato.monto_asignado || 0;
+                            }
+                        }
+                    }
+                    
+                    // Calcular comisiones pagadas
+                    const comisionesPagadas = certificaciones
+                        .filter(c => c.pagado)
+                        .reduce((sum, c) => sum + (c.comision_editada || c.comision_calculada || 0), 0);
+                    
+                    // Calcular saldo disponible
+                    const saldoDisponible = totalPagado - comisionesPagadas;
                     
                     const modal = this.createModal('Editar Contrato', `
                         <form id="edit-contract-form">
@@ -2026,6 +2145,29 @@
                                         <input type="radio" name="edit-contract-estado" value="cancelado" ${contrato.estado === 'cancelado' ? 'checked' : ''} style="width: 16px; height: 16px;">
                                         <span>Cancelado</span>
                                     </label>
+                                </div>
+                            </div>
+                            
+                            <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: #0c4a6e;">Resumen Financiero</h3>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Total Pagado al Contrato</div>
+                                        <div style="font-weight: 500;">${this.formatCurrency(totalPagado)}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Comisiones Pagadas</div>
+                                        <div style="font-weight: 500;">${this.formatCurrency(comisionesPagadas)}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Saldo Disponible</div>
+                                        <div style="font-weight: 500; color: ${saldoDisponible >= 0 ? '#16a34a' : '#ef4444'}">
+                                            ${this.formatCurrency(saldoDisponible)}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 8px; font-size: 0.75rem; color: #64748b;">
+                                    <em>Saldo disponible = Total pagado - Comisiones pagadas</em>
                                 </div>
                             </div>
                         </form>
@@ -2250,6 +2392,30 @@
                     const existingCerts = await localDB.getCertificacionesByContrato(contratoId);
                     const existingMonths = existingCerts.map(c => new Date(c.mes).toISOString().substring(0, 7));
                     
+                    // Obtener información de pagos para validación de comisión
+                    const pagosGlobales = await localDB.getAllByIndex('pagos', 'empresa_id', contrato.empresa_id);
+                    const pagosEspecificos = await localDB.getAllByIndex('pagos', 'contrato_id', contratoId);
+                    
+                    // Calcular total pagado al contrato
+                    let totalPagado = 0;
+                    totalPagado += pagosEspecificos.reduce((sum, pago) => sum + (pago.monto_total || 0), 0);
+                    for (const pago of pagosGlobales) {
+                        if (pago.distribuciones && Array.isArray(pago.distribuciones)) {
+                            const distribucionContrato = pago.distribuciones.find(d => d.contrato_id === contratoId);
+                            if (distribucionContrato) {
+                                totalPagado += distribucionContrato.monto_asignado || 0;
+                            }
+                        }
+                    }
+                    
+                    // Calcular comisiones ya pagadas
+                    const comisionesPagadas = existingCerts
+                        .filter(c => c.pagado)
+                        .reduce((sum, c) => sum + (c.comision_editada || c.comision_calculada || 0), 0);
+                    
+                    // Calcular saldo disponible
+                    const saldoDisponible = totalPagado - comisionesPagadas;
+                    
                     const modal = this.createModal('Nueva Certificación', `
                         <form id="certification-form">
                             <div style="margin-bottom: 20px;">
@@ -2263,6 +2429,7 @@
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Mes *</label>
                                 <input type="month" id="certification-mes" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;" required>
+                                <div id="mes-validation" class="validation-message"></div>
                                 ${existingMonths.length > 0 ? `
                                     <div style="margin-top: 8px; font-size: 0.875rem; color: #ef4444;">
                                         Meses ya certificados: ${existingMonths.map(m => m.replace('-', '/')).join(', ')}
@@ -2273,11 +2440,13 @@
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Monto certificado ($) *</label>
                                 <input type="number" id="certification-monto" min="0" step="0.01" placeholder="0.00" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;" required>
+                                <div id="monto-validation" class="validation-message"></div>
                             </div>
                             
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Porcentaje de comisión (%)</label>
                                 <input type="number" id="certification-porcentaje" value="${contrato.comision_personalizada || empresa?.comision_default || 1}" min="0.1" max="100" step="0.1" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
+                                <div id="porcentaje-validation" class="validation-message"></div>
                             </div>
                             
                             <div style="margin-bottom: 20px;">
@@ -2285,6 +2454,24 @@
                                 <input type="number" id="certification-comision-editada" min="0" step="0.01" placeholder="Dejar vacío para calcular automáticamente" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                 <div style="margin-top: 8px; font-size: 0.875rem; color: #64748b;">
                                     Comisión calculada: <span id="calculated-commission">$0.00</span>
+                                </div>
+                                <div id="comision-validation" class="validation-message"></div>
+                            </div>
+                            
+                            <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: #0c4a6e;">Información de Validación</h3>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Saldo disponible</div>
+                                        <div style="font-weight: 500; color: ${saldoDisponible >= 0 ? '#16a34a' : '#ef4444'}">${this.formatCurrency(saldoDisponible)}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Comisiones pendientes</div>
+                                        <div style="font-weight: 500; color: ${saldoDisponible >= 0 ? '#16a34a' : '#ef4444'}">${this.formatCurrency(saldoDisponible)}</div>
+                                    </div>
+                                </div>
+                                <div id="saldo-validation" class="validation-message validation-warning" style="display: ${saldoDisponible < 0 ? 'block' : 'none'};">
+                                    ⚠️ El saldo disponible es negativo. No hay fondos suficientes para pagar esta certificación.
                                 </div>
                             </div>
                             
@@ -2298,9 +2485,107 @@
                                     <input type="checkbox" id="certification-pagado" style="width: 16px; height: 16px;">
                                     <span>Marcar como pagado</span>
                                 </label>
+                                <div id="pagado-validation" class="validation-message"></div>
                             </div>
                         </form>
                     `, 'Guardar Certificación');
+                    
+                    // Función para validar comisión en tiempo real
+                    const validarComision = () => {
+                        const monto = parseFloat(modal.querySelector('#certification-monto').value) || 0;
+                        const porcentaje = parseFloat(modal.querySelector('#certification-porcentaje').value) || (contrato.comision_personalizada || empresa?.comision_default || 1);
+                        const comisionCalculada = (monto * porcentaje) / 100;
+                        const comisionEditada = parseFloat(modal.querySelector('#certification-comision-editada').value) || comisionCalculada;
+                        const pagado = modal.querySelector('#certification-pagado').checked;
+                        
+                        modal.querySelector('#calculated-commission').textContent = this.formatCurrency(comisionCalculada);
+                        
+                        // Validaciones
+                        let isValid = true;
+                        
+                        // Validar mes
+                        const mes = modal.querySelector('#certification-mes').value;
+                        const mesValidation = modal.querySelector('#mes-validation');
+                        if (!mes) {
+                            mesValidation.textContent = 'Seleccione un mes';
+                            mesValidation.className = 'validation-message validation-error';
+                            mesValidation.style.display = 'block';
+                            isValid = false;
+                        } else if (existingMonths.includes(mes)) {
+                            mesValidation.textContent = 'Ya existe una certificación para este mes';
+                            mesValidation.className = 'validation-message validation-error';
+                            mesValidation.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            mesValidation.style.display = 'none';
+                        }
+                        
+                        // Validar monto
+                        const montoValidation = modal.querySelector('#monto-validation');
+                        if (monto <= 0) {
+                            montoValidation.textContent = 'El monto debe ser mayor a 0';
+                            montoValidation.className = 'validation-message validation-error';
+                            montoValidation.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            montoValidation.style.display = 'none';
+                        }
+                        
+                        // Validar porcentaje
+                        const porcentajeValidation = modal.querySelector('#porcentaje-validation');
+                        if (porcentaje <= 0 || porcentaje > 100) {
+                            porcentajeValidation.textContent = 'El porcentaje debe estar entre 0.1% y 100%';
+                            porcentajeValidation.className = 'validation-message validation-error';
+                            porcentajeValidation.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            porcentajeValidation.style.display = 'none';
+                        }
+                        
+                        // Validar comisión
+                        const comisionValidation = modal.querySelector('#comision-validation');
+                        if (comisionEditada < 0) {
+                            comisionValidation.textContent = 'La comisión no puede ser negativa';
+                            comisionValidation.className = 'validation-message validation-error';
+                            comisionValidation.style.display = 'block';
+                            isValid = false;
+                        } else if (comisionEditada > monto) {
+                            comisionValidation.textContent = 'La comisión no puede ser mayor al monto certificado';
+                            comisionValidation.className = 'validation-message validation-error';
+                            comisionValidation.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            comisionValidation.style.display = 'none';
+                        }
+                        
+                        // Validar pago si se marca como pagado
+                        const pagadoValidation = modal.querySelector('#pagado-validation');
+                        if (pagado && comisionEditada > saldoDisponible) {
+                            pagadoValidation.textContent = `No hay suficiente saldo disponible. Saldo: ${this.formatCurrency(saldoDisponible)}, Comisión: ${this.formatCurrency(comisionEditada)}`;
+                            pagadoValidation.className = 'validation-message validation-error';
+                            pagadoValidation.style.display = 'block';
+                            modal.querySelector('#certification-pagado').checked = false;
+                            isValid = false;
+                        } else {
+                            pagadoValidation.style.display = 'none';
+                        }
+                        
+                        // Actualizar UI de validación
+                        const inputs = modal.querySelectorAll('input[type="number"], input[type="month"]');
+                        inputs.forEach(input => {
+                            if (input.checkValidity() && input.value) {
+                                input.classList.remove('invalid');
+                                input.classList.add('valid');
+                            } else if (!input.value && input.required) {
+                                input.classList.remove('valid');
+                                input.classList.add('invalid');
+                            } else {
+                                input.classList.remove('invalid', 'valid');
+                            }
+                        });
+                        
+                        return isValid;
+                    };
                     
                     // Calcular comisión automáticamente
                     const calcularComision = () => {
@@ -2313,16 +2598,29 @@
                         if (!modal.querySelector('#certification-comision-editada').value) {
                             modal.querySelector('#certification-comision-editada').value = comisionCalculada.toFixed(2);
                         }
+                        
+                        // Validar
+                        validarComision();
                     };
                     
+                    // Event listeners para validación en tiempo real
+                    modal.querySelector('#certification-mes').addEventListener('change', validarComision);
                     modal.querySelector('#certification-monto').addEventListener('input', calcularComision);
                     modal.querySelector('#certification-porcentaje').addEventListener('input', calcularComision);
+                    modal.querySelector('#certification-comision-editada').addEventListener('input', validarComision);
+                    modal.querySelector('#certification-pagado').addEventListener('change', validarComision);
                     
                     // Calcular comisión inicial
                     calcularComision();
                     
                     modal.querySelector('form').onsubmit = async (e) => {
                         e.preventDefault();
+                        
+                        // Validar antes de enviar
+                        if (!validarComision()) {
+                            this.showToast('Corrija los errores en el formulario', 'error');
+                            return;
+                        }
                         
                         const saveBtn = modal.querySelector('.modal-save-btn');
                         saveBtn.disabled = true;
@@ -2361,6 +2659,14 @@
                         
                         if (!certificationData.monto_certificado) {
                             this.showToast('Ingrese el monto certificado', 'error');
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = 'Guardar Certificación';
+                            return;
+                        }
+                        
+                        // Validación final de saldo disponible
+                        if (certificationData.pagado && certificationData.comision_editada > saldoDisponible) {
+                            this.showToast(`No hay suficiente saldo disponible. Saldo: ${this.formatCurrency(saldoDisponible)}`, 'error');
                             saveBtn.disabled = false;
                             saveBtn.textContent = 'Guardar Certificación';
                             return;
@@ -2469,6 +2775,31 @@
                     const contrato = await localDB.get('contratos', certificacion.contrato_id);
                     const empresa = await localDB.get('empresas', contrato.empresa_id);
                     
+                    // Obtener información de pagos para validación
+                    const pagosGlobales = await localDB.getAllByIndex('pagos', 'empresa_id', contrato.empresa_id);
+                    const pagosEspecificos = await localDB.getAllByIndex('pagos', 'contrato_id', certificacion.contrato_id);
+                    
+                    // Calcular total pagado al contrato
+                    let totalPagado = 0;
+                    totalPagado += pagosEspecificos.reduce((sum, pago) => sum + (pago.monto_total || 0), 0);
+                    for (const pago of pagosGlobales) {
+                        if (pago.distribuciones && Array.isArray(pago.distribuciones)) {
+                            const distribucionContrato = pago.distribuciones.find(d => d.contrato_id === certificacion.contrato_id);
+                            if (distribucionContrato) {
+                                totalPagado += distribucionContrato.monto_asignado || 0;
+                            }
+                        }
+                    }
+                    
+                    // Obtener todas las certificaciones del contrato
+                    const todasCertificaciones = await localDB.getCertificacionesByContrato(certificacion.contrato_id);
+                    const comisionesPagadasExcluyendoActual = todasCertificaciones
+                        .filter(c => c.pagado && c.id !== id)
+                        .reduce((sum, c) => sum + (c.comision_editada || c.comision_calculada || 0), 0);
+                    
+                    // Calcular saldo disponible excluyendo esta certificación
+                    const saldoDisponible = totalPagado - comisionesPagadasExcluyendoActual;
+                    
                     const modal = this.createModal('Editar Certificación', `
                         <form id="edit-certification-form">
                             <div style="margin-bottom: 20px;">
@@ -2488,11 +2819,13 @@
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Monto certificado ($) *</label>
                                 <input type="number" id="edit-certification-monto" value="${certificacion.monto_certificado}" min="0" step="0.01" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;" required>
+                                <div id="edit-monto-validation" class="validation-message"></div>
                             </div>
                             
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; font-size: 0.875rem; font-weight: 500; color: #475569; margin-bottom: 8px;">Porcentaje de comisión (%)</label>
                                 <input type="number" id="edit-certification-porcentaje" value="${certificacion.porcentaje_comision}" min="0.1" max="100" step="0.1" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
+                                <div id="edit-porcentaje-validation" class="validation-message"></div>
                             </div>
                             
                             <div style="margin-bottom: 20px;">
@@ -2500,6 +2833,20 @@
                                 <input type="number" id="edit-certification-comision-editada" value="${certificacion.comision_editada || certificacion.comision_calculada}" min="0" step="0.01" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem;">
                                 <div style="margin-top: 8px; font-size: 0.875rem; color: #64748b;">
                                     Comisión calculada: <span id="edit-calculated-commission">${this.formatCurrency(certificacion.comision_calculada)}</span>
+                                </div>
+                                <div id="edit-comision-validation" class="validation-message"></div>
+                            </div>
+                            
+                            <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: #0c4a6e;">Información de Validación</h3>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                                    <div>
+                                        <div style="font-size: 0.875rem; color: #64748b;">Saldo disponible</div>
+                                        <div style="font-weight: 500; color: ${saldoDisponible >= 0 ? '#16a34a' : '#ef4444'}">${this.formatCurrency(saldoDisponible)}</div>
+                                    </div>
+                                </div>
+                                <div id="edit-saldo-validation" class="validation-message validation-warning" style="display: ${saldoDisponible < 0 ? 'block' : 'none'};">
+                                    ⚠️ El saldo disponible es negativo. No hay fondos suficientes para pagar esta certificación.
                                 </div>
                             </div>
                             
@@ -2513,9 +2860,90 @@
                                     <input type="checkbox" id="edit-certification-pagado" ${certificacion.pagado ? 'checked' : ''} style="width: 16px; height: 16px;">
                                     <span>Marcar como pagado</span>
                                 </label>
+                                <div id="edit-pagado-validation" class="validation-message"></div>
                             </div>
                         </form>
                     `, 'Guardar Cambios');
+                    
+                    // Función para validar comisión en tiempo real
+                    const validarComision = () => {
+                        const monto = parseFloat(modal.querySelector('#edit-certification-monto').value) || 0;
+                        const porcentaje = parseFloat(modal.querySelector('#edit-certification-porcentaje').value) || certificacion.porcentaje_comision;
+                        const comisionCalculada = (monto * porcentaje) / 100;
+                        const comisionEditada = parseFloat(modal.querySelector('#edit-certification-comision-editada').value) || comisionCalculada;
+                        const pagado = modal.querySelector('#edit-certification-pagado').checked;
+                        
+                        modal.querySelector('#edit-calculated-commission').textContent = this.formatCurrency(comisionCalculada);
+                        
+                        // Validaciones
+                        let isValid = true;
+                        
+                        // Validar monto
+                        const montoValidation = modal.querySelector('#edit-monto-validation');
+                        if (monto <= 0) {
+                            montoValidation.textContent = 'El monto debe ser mayor a 0';
+                            montoValidation.className = 'validation-message validation-error';
+                            montoValidation.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            montoValidation.style.display = 'none';
+                        }
+                        
+                        // Validar porcentaje
+                        const porcentajeValidation = modal.querySelector('#edit-porcentaje-validation');
+                        if (porcentaje <= 0 || porcentaje > 100) {
+                            porcentajeValidation.textContent = 'El porcentaje debe estar entre 0.1% y 100%';
+                            porcentajeValidation.className = 'validation-message validation-error';
+                            porcentajeValidation.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            porcentajeValidation.style.display = 'none';
+                        }
+                        
+                        // Validar comisión
+                        const comisionValidation = modal.querySelector('#edit-comision-validation');
+                        if (comisionEditada < 0) {
+                            comisionValidation.textContent = 'La comisión no puede ser negativa';
+                            comisionValidation.className = 'validation-message validation-error';
+                            comisionValidation.style.display = 'block';
+                            isValid = false;
+                        } else if (comisionEditada > monto) {
+                            comisionValidation.textContent = 'La comisión no puede ser mayor al monto certificado';
+                            comisionValidation.className = 'validation-message validation-error';
+                            comisionValidation.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            comisionValidation.style.display = 'none';
+                        }
+                        
+                        // Validar pago si se marca como pagado
+                        const pagadoValidation = modal.querySelector('#edit-pagado-validation');
+                        if (pagado && comisionEditada > saldoDisponible) {
+                            pagadoValidation.textContent = `No hay suficiente saldo disponible. Saldo: ${this.formatCurrency(saldoDisponible)}, Comisión: ${this.formatCurrency(comisionEditada)}`;
+                            pagadoValidation.className = 'validation-message validation-error';
+                            pagadoValidation.style.display = 'block';
+                            modal.querySelector('#edit-certification-pagado').checked = false;
+                            isValid = false;
+                        } else {
+                            pagadoValidation.style.display = 'none';
+                        }
+                        
+                        // Actualizar UI de validación
+                        const inputs = modal.querySelectorAll('input[type="number"]');
+                        inputs.forEach(input => {
+                            if (input.checkValidity() && input.value) {
+                                input.classList.remove('invalid');
+                                input.classList.add('valid');
+                            } else if (!input.value && input.required) {
+                                input.classList.remove('valid');
+                                input.classList.add('invalid');
+                            } else {
+                                input.classList.remove('invalid', 'valid');
+                            }
+                        });
+                        
+                        return isValid;
+                    };
                     
                     // Calcular comisión automáticamente
                     const calcularComision = () => {
@@ -2523,13 +2951,25 @@
                         const porcentaje = parseFloat(modal.querySelector('#edit-certification-porcentaje').value) || certificacion.porcentaje_comision;
                         const comisionCalculada = (monto * porcentaje) / 100;
                         modal.querySelector('#edit-calculated-commission').textContent = this.formatCurrency(comisionCalculada);
+                        
+                        // Validar
+                        validarComision();
                     };
                     
+                    // Event listeners
                     modal.querySelector('#edit-certification-monto').addEventListener('input', calcularComision);
                     modal.querySelector('#edit-certification-porcentaje').addEventListener('input', calcularComision);
+                    modal.querySelector('#edit-certification-comision-editada').addEventListener('input', validarComision);
+                    modal.querySelector('#edit-certification-pagado').addEventListener('change', validarComision);
                     
                     modal.querySelector('form').onsubmit = async (e) => {
                         e.preventDefault();
+                        
+                        // Validar antes de enviar
+                        if (!validarComision()) {
+                            this.showToast('Corrija los errores en el formulario', 'error');
+                            return;
+                        }
                         
                         const saveBtn = modal.querySelector('.modal-save-btn');
                         saveBtn.disabled = true;
@@ -2545,6 +2985,14 @@
                         
                         if (!certificationData.monto_certificado) {
                             this.showToast('Ingrese el monto certificado', 'error');
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = 'Guardar Cambios';
+                            return;
+                        }
+                        
+                        // Validación final de saldo disponible
+                        if (certificationData.pagado && certificationData.comision_editada > saldoDisponible) {
+                            this.showToast(`No hay suficiente saldo disponible. Saldo: ${this.formatCurrency(saldoDisponible)}`, 'error');
                             saveBtn.disabled = false;
                             saveBtn.textContent = 'Guardar Cambios';
                             return;
