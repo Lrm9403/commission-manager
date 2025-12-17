@@ -434,14 +434,10 @@ class SupabaseManager {
         id: empresaId,
         auth_id: this.user.id,
         nombre: empresaData.nombre.trim(),
-        rut: empresaData.rut || '',
-        direccion: empresaData.direccion || '',
-        telefono: empresaData.telefono || '',
-        email: empresaData.email || '',
-        contacto: empresaData.contacto || '',
-        estado: empresaData.estado || 'activa',
+        director: empresaData.director || '',
+        descripcion: empresaData.descripcion || '',
         comision_default: empresaData.comision_default || 1.00,
-        notas: empresaData.notas || '',
+        estado: empresaData.estado || 'activa',
         fecha_creacion: new Date().toISOString(),
         fecha_actualizacion: new Date().toISOString()
       };
@@ -1086,6 +1082,27 @@ class SupabaseManager {
       return {
         success: false,
         error: error.message
+      };
+    }
+  }
+  
+  async deleteAccount() {
+    try {
+      const { error } = await this.supabase.auth.admin.deleteUser(this.user.id);
+      
+      if (error) throw error;
+      
+      await this.logout();
+      
+      return {
+        success: true,
+        message: 'Cuenta eliminada correctamente'
+      };
+    } catch (error) {
+      console.error('Error eliminando cuenta:', error);
+      return {
+        success: false,
+        error: 'No se pudo eliminar la cuenta'
       };
     }
   }
