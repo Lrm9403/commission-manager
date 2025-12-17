@@ -3,7 +3,7 @@ class LocalDatabase {
   constructor() {
     this.db = null;
     this.dbName = 'CommissionManagerDB';
-    this.dbVersion = 5; // Versión incrementada para forzar actualización
+    this.dbVersion = 6; // Versión incrementada
     this.initPromise = null;
   }
 
@@ -30,38 +30,37 @@ class LocalDatabase {
         const db = event.target.result;
         console.log('🔄 Actualizando estructura de IndexedDB...');
 
-        // Tabla de usuarios
-        if (!db.objectStoreNames.contains('usuarios')) {
-          const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
-          userStore.createIndex('auth_id', 'auth_id', { unique: false });
-          userStore.createIndex('email', 'email', { unique: false });
-          userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
+        // Eliminar tablas antiguas si existen y recrearlas
+        if (db.objectStoreNames.contains('usuarios')) {
+          db.deleteObjectStore('usuarios');
+        }
+        
+        if (db.objectStoreNames.contains('empresas')) {
+          db.deleteObjectStore('empresas');
+        }
+        
+        if (db.objectStoreNames.contains('contratos')) {
+          db.deleteObjectStore('contratos');
         }
 
-        // Tabla de empresas - ACTUALIZADA para usar auth_id
-        if (!db.objectStoreNames.contains('empresas')) {
-          const companyStore = db.createObjectStore('empresas', { keyPath: 'id' });
-          companyStore.createIndex('usuario_id', 'usuario_id', { unique: false });
-          companyStore.createIndex('auth_id', 'auth_id', { unique: false }); // NUEVO índice
-          companyStore.createIndex('nombre', 'nombre', { unique: false });
-          companyStore.createIndex('estado', 'estado', { unique: false });
-        } else {
-          // Actualizar store existente para agregar índice auth_id
-          const transaction = event.currentTarget.transaction;
-          const companyStore = transaction.objectStore('empresas');
-          if (!companyStore.indexNames.contains('auth_id')) {
-            companyStore.createIndex('auth_id', 'auth_id', { unique: false });
-          }
-        }
+        // Tabla de usuarios - NUEVA ESTRUCTURA
+        const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
+        userStore.createIndex('auth_id', 'auth_id', { unique: true });
+        userStore.createIndex('email', 'email', { unique: true });
+        userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
+
+        // Tabla de empresas
+        const companyStore = db.createObjectStore('empresas', { keyPath: 'id' });
+        companyStore.createIndex('auth_id', 'auth_id', { unique: false });
+        companyStore.createIndex('nombre', 'nombre', { unique: false });
+        companyStore.createIndex('estado', 'estado', { unique: false });
 
         // Tabla de contratos
-        if (!db.objectStoreNames.contains('contratos')) {
-          const contractStore = db.createObjectStore('contratos', { keyPath: 'id' });
-          contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
-          contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false });
-          contractStore.createIndex('estado', 'estado', { unique: false });
-          contractStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
-        }
+        const contractStore = db.createObjectStore('contratos', { keyPath: 'id' });
+        contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
+        contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false });
+        contractStore.createIndex('estado', 'estado', { unique: false });
+        contractStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
 
         // Tabla de suplementos
         if (!db.objectStoreNames.contains('suplementos')) {
@@ -273,7 +272,6 @@ class LocalDatabase {
   // Método para agregar a la cola de sincronización
   async addToSyncQueue(action, table, recordId, data) {
     const syncItem = {
-      id: `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       action: action, // 'INSERT', 'UPDATE', 'DELETE'
       table: table,
       record_id: recordId,
@@ -627,20 +625,9 @@ class LocalDatabase {
     });
   }
 
-  // Métodos específicos para la aplicación - ACTUALIZADOS
-  async getUserByEmail(email) {
-    return this.getByIndex('usuarios', 'email', email);
-  }
-
-  async getEmpresasByUsuario(usuarioId) {
-    // Primero intentar por auth_id (nuevo método)
-    const empresasByAuthId = await this.getAllByIndex('empresas', 'auth_id', usuarioId);
-    if (empresasByAuthId.length > 0) {
-      return empresasByAuthId;
-    }
-    
-    // Si no hay por auth_id, buscar por usuario_id (para compatibilidad)
-    return this.getAllByIndex('empresas', 'usuario_id', usuarioId);
+  // Métodos específicos para la aplicación
+  async getUserByAuthId(authId) {
+    return this.getByIndex('usuarios', 'auth_id', authId);
   }
 
   async getEmpresasByAuthId(authId) {
@@ -672,33 +659,6 @@ class LocalDatabase {
     });
   }
 
-  // Método para migrar empresas existentes a usar auth_id
-  async migrateEmpresasToAuthId(authId) {
-    try {
-      console.log(`🔄 Migrando empresas a usar auth_id: ${authId}`);
-      
-      // Obtener todas las empresas del usuario actual
-      const empresas = await this.getAll('empresas');
-      let migratedCount = 0;
-      
-      for (const empresa of empresas) {
-        // Si la empresa no tiene auth_id pero tiene usuario_id, migrarla
-        if (!empresa.auth_id && empresa.usuario_id) {
-          empresa.auth_id = authId;
-          await this.update('empresas', empresa);
-          migratedCount++;
-        }
-      }
-      
-      console.log(`✅ Migradas ${migratedCount} empresas a usar auth_id`);
-      return migratedCount;
-    } catch (error) {
-      console.error('Error migrando empresas:', error);
-      return 0;
-    }
-  }
-
-  // Método para limpiar empresas duplicadas
   async cleanupDuplicateEmpresas() {
     try {
       const empresas = await this.getAll('empresas');
@@ -706,7 +666,7 @@ class LocalDatabase {
       let deletedCount = 0;
       
       for (const empresa of empresas) {
-        const key = `${empresa.auth_id || empresa.usuario_id}_${empresa.nombre}`;
+        const key = `${empresa.auth_id}_${empresa.nombre}`;
         
         if (empresasMap.has(key)) {
           // Empresa duplicada, eliminar
@@ -725,11 +685,9 @@ class LocalDatabase {
     }
   }
 
-  // Método para obtener estadísticas detalladas
   async getDetailedStats() {
     const stats = await this.getStats();
     
-    // Agregar estadísticas adicionales
     try {
       // Estadísticas de certificaciones por estado
       const certificaciones = await this.getAll('certificaciones');
@@ -757,7 +715,6 @@ class LocalDatabase {
     return stats;
   }
 
-  // Método para verificar y reparar la base de datos
   async verifyAndRepair() {
     console.log('🔍 Verificando integridad de la base de datos...');
     
@@ -810,7 +767,6 @@ class LocalDatabase {
     }
   }
 
-  // Método para optimizar la base de datos
   async optimize() {
     console.log('⚡ Optimizando base de datos...');
     
