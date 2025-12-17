@@ -234,6 +234,20 @@ class LocalDatabase {
     });
   }
 
+  // Método set para compatibilidad con supabase.js (inserta o actualiza)
+  async set(storeName, data) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([storeName], 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.put(data); // put hace insert o update según si existe el id
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
   // Método para obtener items de sincronización pendientes
   async getPendingSyncItems(limit = 50) {
     await this.init();
@@ -652,7 +666,7 @@ class LocalDatabase {
   }
 
   async setConfig(key, value) {
-    await this.update('configuracion', {
+    await this.set('configuracion', {
       key: key,
       value: value,
       updated: new Date().toISOString()
