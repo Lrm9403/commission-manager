@@ -41,6 +41,12 @@ class SupabaseManager {
     console.log('🔧 Inicializando Supabase Manager...');
     
     try {
+      // Asegurarse que localDB esté inicializado
+      if (!window.localDB) {
+        console.warn('⚠️ localDB no está disponible aún, esperando...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
       // Restaurar sesión
       await this.restoreSession();
       
@@ -114,8 +120,14 @@ class SupabaseManager {
     if (!this.user) return null;
     
     try {
+      // Asegurarse que localDB esté inicializado
+      if (!window.localDB || !window.localDB.getUserByAuthId) {
+        console.warn('localDB no está disponible');
+        return null;
+      }
+      
       // Buscar por auth_id
-      return await localDB.getUserByAuthId(this.user.id);
+      return await window.localDB.getUserByAuthId(this.user.id);
     } catch (error) {
       console.warn('Error obteniendo perfil local:', error);
       return null;
@@ -138,8 +150,14 @@ class SupabaseManager {
     };
 
     try {
+      // Asegurarse que localDB esté disponible
+      if (!window.localDB || !window.localDB.set) {
+        console.error('localDB no está disponible o no tiene método set');
+        throw new Error('Base de datos local no disponible');
+      }
+
       // Guardar localmente usando el método correcto
-      await localDB.set('usuarios', profileData);
+      await window.localDB.set('usuarios', profileData);
       this.profile = profileData;
       
       return profileData;
@@ -165,7 +183,9 @@ class SupabaseManager {
     };
     
     try {
-      await localDB.set('usuarios', emergencyProfile);
+      if (window.localDB && window.localDB.set) {
+        await window.localDB.set('usuarios', emergencyProfile);
+      }
       this.profile = emergencyProfile;
       return emergencyProfile;
     } catch (error) {
@@ -220,7 +240,9 @@ class SupabaseManager {
           email_confirmado: false
         };
         
-        await localDB.set('usuarios', tempProfile);
+        if (window.localDB && window.localDB.set) {
+          await window.localDB.set('usuarios', tempProfile);
+        }
         this.profile = tempProfile;
         
         return {
@@ -321,8 +343,11 @@ class SupabaseManager {
     try {
       let empresas = [];
       
-      // Obtener locales usando auth_id
-      empresas = await localDB.getAllByIndex('empresas', 'auth_id', this.user.id);
+      // Asegurarse que localDB esté disponible
+      if (window.localDB && window.localDB.getAllByIndex) {
+        // Obtener locales usando auth_id
+        empresas = await window.localDB.getAllByIndex('empresas', 'auth_id', this.user.id);
+      }
       
       return empresas;
     } catch (error) {
@@ -352,10 +377,21 @@ class SupabaseManager {
         fecha_actualizacion: new Date().toISOString()
       };
 
+      // Validar campos requeridos
+      if (!empresaCompleta.nombre || !empresaCompleta.rut || !empresaCompleta.direccion) {
+        return {
+          success: false,
+          error: 'Faltan campos requeridos: nombre, RUT y dirección'
+        };
+      }
+
       // Guardar localmente - usando el método correcto
-      await localDB.set('empresas', empresaCompleta);
-      
-      console.log('✅ Empresa creada localmente:', empresaCompleta.nombre);
+      if (window.localDB && window.localDB.set) {
+        await window.localDB.set('empresas', empresaCompleta);
+        console.log('✅ Empresa creada localmente:', empresaCompleta.nombre);
+      } else {
+        throw new Error('Base de datos local no disponible');
+      }
       
       return {
         success: true,
@@ -380,7 +416,12 @@ class SupabaseManager {
     }
 
     try {
-      const empresaActual = await localDB.get('empresas', empresaId);
+      // Asegurarse que localDB esté disponible
+      if (!window.localDB || !window.localDB.get || !window.localDB.set) {
+        throw new Error('Base de datos local no disponible');
+      }
+
+      const empresaActual = await window.localDB.get('empresas', empresaId);
       if (!empresaActual || empresaActual.auth_id !== this.user.id) {
         return {
           success: false,
@@ -395,7 +436,7 @@ class SupabaseManager {
       };
 
       // Actualizar localmente
-      await localDB.set('empresas', updatedData);
+      await window.localDB.set('empresas', updatedData);
 
       return {
         success: true,
@@ -420,7 +461,12 @@ class SupabaseManager {
     }
 
     try {
-      const empresaActual = await localDB.get('empresas', empresaId);
+      // Asegurarse que localDB esté disponible
+      if (!window.localDB || !window.localDB.get || !window.localDB.delete) {
+        throw new Error('Base de datos local no disponible');
+      }
+
+      const empresaActual = await window.localDB.get('empresas', empresaId);
       if (!empresaActual || empresaActual.auth_id !== this.user.id) {
         return {
           success: false,
@@ -429,7 +475,7 @@ class SupabaseManager {
       }
 
       // 1. Verificar si hay contratos asociados
-      const contratos = await localDB.getAllByIndex('contratos', 'empresa_id', empresaId);
+      const contratos = await window.localDB.getAllByIndex('contratos', 'empresa_id', empresaId);
       if (contratos.length > 0) {
         return {
           success: false,
@@ -438,7 +484,7 @@ class SupabaseManager {
       }
 
       // 2. Eliminar localmente
-      await localDB.delete('empresas', empresaId);
+      await window.localDB.delete('empresas', empresaId);
 
       return {
         success: true,
@@ -482,7 +528,11 @@ class SupabaseManager {
       }
 
       // Guardar localmente
-      await localDB.set('contratos', contratoCompleto);
+      if (window.localDB && window.localDB.set) {
+        await window.localDB.set('contratos', contratoCompleto);
+      } else {
+        throw new Error('Base de datos local no disponible');
+      }
 
       return {
         success: true,
@@ -500,8 +550,11 @@ class SupabaseManager {
 
   async getContratosByEmpresa(empresaId) {
     try {
-      const contratos = await localDB.getAllByIndex('contratos', 'empresa_id', empresaId);
-      return contratos;
+      if (window.localDB && window.localDB.getAllByIndex) {
+        const contratos = await window.localDB.getAllByIndex('contratos', 'empresa_id', empresaId);
+        return contratos;
+      }
+      return [];
     } catch (error) {
       console.error('Error obteniendo contratos:', error);
       return [];
@@ -544,7 +597,11 @@ class SupabaseManager {
       }
 
       // Guardar localmente
-      await localDB.set('certificaciones', certificacionCompleta);
+      if (window.localDB && window.localDB.set) {
+        await window.localDB.set('certificaciones', certificacionCompleta);
+      } else {
+        throw new Error('Base de datos local no disponible');
+      }
 
       return {
         success: true,
@@ -562,8 +619,11 @@ class SupabaseManager {
 
   async getCertificacionesByContrato(contratoId) {
     try {
-      const certificaciones = await localDB.getAllByIndex('certificaciones', 'contrato_id', contratoId);
-      return certificaciones;
+      if (window.localDB && window.localDB.getAllByIndex) {
+        const certificaciones = await window.localDB.getAllByIndex('certificaciones', 'contrato_id', contratoId);
+        return certificaciones;
+      }
+      return [];
     } catch (error) {
       console.error('Error obteniendo certificaciones:', error);
       return [];
@@ -597,7 +657,11 @@ class SupabaseManager {
       }
 
       // Guardar localmente
-      await localDB.set('pagos', pagoCompleto);
+      if (window.localDB && window.localDB.set) {
+        await window.localDB.set('pagos', pagoCompleto);
+      } else {
+        throw new Error('Base de datos local no disponible');
+      }
 
       return {
         success: true,
@@ -615,8 +679,11 @@ class SupabaseManager {
 
   async getPagosByEmpresa(empresaId) {
     try {
-      const pagos = await localDB.getAllByIndex('pagos', 'empresa_id', empresaId);
-      return pagos;
+      if (window.localDB && window.localDB.getAllByIndex) {
+        const pagos = await window.localDB.getAllByIndex('pagos', 'empresa_id', empresaId);
+        return pagos;
+      }
+      return [];
     } catch (error) {
       console.error('Error obteniendo pagos:', error);
       return [];
@@ -642,7 +709,11 @@ class SupabaseManager {
     console.log('🔄 Iniciando sincronización de datos...');
     
     try {
-      const pendingItems = await localDB.getAll('sync_queue');
+      if (!window.localDB || !window.localDB.getAll || !window.localDB.update || !window.localDB.delete) {
+        throw new Error('Base de datos local no disponible');
+      }
+
+      const pendingItems = await window.localDB.getAll('sync_queue');
       
       if (pendingItems.length === 0) {
         return {
@@ -657,7 +728,7 @@ class SupabaseManager {
       
       for (const item of pendingItems) {
         try {
-          await localDB.update('sync_queue', {
+          await window.localDB.update('sync_queue', {
             ...item,
             estado: 'procesando',
             fecha_actualizacion: new Date().toISOString()
@@ -697,16 +768,16 @@ class SupabaseManager {
             throw result.error;
           }
 
-          await localDB.delete('sync_queue', item.id);
+          await window.localDB.delete('sync_queue', item.id);
           successCount++;
           
         } catch (error) {
           console.error(`Error sincronizando ${item.table}:`, error);
           
           if (item.intentos >= 3) {
-            await localDB.delete('sync_queue', item.id);
+            await window.localDB.delete('sync_queue', item.id);
           } else {
-            await localDB.set('sync_queue', {
+            await window.localDB.set('sync_queue', {
               ...item,
               intentos: (item.intentos || 0) + 1
             });
@@ -851,8 +922,12 @@ class SupabaseManager {
       };
 
       // Actualizar localmente
-      await localDB.set('usuarios', updatedData);
-      this.profile = updatedData;
+      if (window.localDB && window.localDB.set) {
+        await window.localDB.set('usuarios', updatedData);
+        this.profile = updatedData;
+      } else {
+        throw new Error('Base de datos local no disponible');
+      }
       
       // Aplicar tema inmediatamente
       if (profileData.config_tema) {
@@ -947,7 +1022,9 @@ class SupabaseManager {
   async deleteAccount() {
     try {
       // Primero eliminar todos los datos locales
-      await localDB.clearAll();
+      if (window.localDB && window.localDB.resetDatabase) {
+        await window.localDB.resetDatabase();
+      }
       
       // Luego eliminar cuenta en Supabase
       const { error } = await this.supabase.rpc('delete_user');
