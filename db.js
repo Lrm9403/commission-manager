@@ -3,25 +3,34 @@ class LocalDatabase {
   constructor() {
     this.db = null;
     this.dbName = 'CommissionManagerDB';
-    this.dbVersion = 6; // Versión incrementada
+    this.dbVersion = 6;
     this.initPromise = null;
+    this.isInitialized = false;
   }
 
   async init() {
+    if (this.isInitialized && this.db) {
+      return this.db;
+    }
+
     if (this.initPromise) {
       return this.initPromise;
     }
 
     this.initPromise = new Promise((resolve, reject) => {
+      console.log('🔧 Inicializando IndexedDB...');
+      
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
       request.onerror = (event) => {
         console.error('❌ Error al abrir IndexedDB:', event.target.error);
         reject(event.target.error);
+        this.initPromise = null;
       };
 
       request.onsuccess = (event) => {
         this.db = event.target.result;
+        this.isInitialized = true;
         console.log('✅ IndexedDB inicializada correctamente');
         resolve(this.db);
       };
@@ -30,97 +39,9 @@ class LocalDatabase {
         const db = event.target.result;
         console.log('🔄 Actualizando estructura de IndexedDB...');
 
-        // Eliminar tablas antiguas si existen y recrearlas
-        if (db.objectStoreNames.contains('usuarios')) {
-          db.deleteObjectStore('usuarios');
-        }
+        // Crear o recrear todas las tablas
+        this.createObjectStores(db);
         
-        if (db.objectStoreNames.contains('empresas')) {
-          db.deleteObjectStore('empresas');
-        }
-        
-        if (db.objectStoreNames.contains('contratos')) {
-          db.deleteObjectStore('contratos');
-        }
-
-        // Tabla de usuarios - NUEVA ESTRUCTURA
-        const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
-        userStore.createIndex('auth_id', 'auth_id', { unique: true });
-        userStore.createIndex('email', 'email', { unique: true });
-        userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
-
-        // Tabla de empresas
-        const companyStore = db.createObjectStore('empresas', { keyPath: 'id' });
-        companyStore.createIndex('auth_id', 'auth_id', { unique: false });
-        companyStore.createIndex('nombre', 'nombre', { unique: false });
-        companyStore.createIndex('estado', 'estado', { unique: false });
-
-        // Tabla de contratos
-        const contractStore = db.createObjectStore('contratos', { keyPath: 'id' });
-        contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
-        contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false });
-        contractStore.createIndex('estado', 'estado', { unique: false });
-        contractStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
-
-        // Tabla de suplementos
-        if (!db.objectStoreNames.contains('suplementos')) {
-          const supplementStore = db.createObjectStore('suplementos', { keyPath: 'id' });
-          supplementStore.createIndex('contrato_id', 'contrato_id', { unique: false });
-          supplementStore.createIndex('fecha_suplemento', 'fecha_suplemento', { unique: false });
-        }
-
-        // Tabla de certificaciones
-        if (!db.objectStoreNames.contains('certificaciones')) {
-          const certificationStore = db.createObjectStore('certificaciones', { keyPath: 'id' });
-          certificationStore.createIndex('contrato_id', 'contrato_id', { unique: false });
-          certificationStore.createIndex('mes', 'mes', { unique: false });
-          certificationStore.createIndex('contrato_mes', ['contrato_id', 'mes'], { unique: false });
-          certificationStore.createIndex('pagado', 'pagado', { unique: false });
-        }
-
-        // Tabla de pagos
-        if (!db.objectStoreNames.contains('pagos')) {
-          const paymentStore = db.createObjectStore('pagos', { keyPath: 'id' });
-          paymentStore.createIndex('empresa_id', 'empresa_id', { unique: false });
-          paymentStore.createIndex('fecha_pago', 'fecha_pago', { unique: false });
-          paymentStore.createIndex('tipo', 'tipo', { unique: false });
-        }
-
-        // Tabla de distribución de pagos
-        if (!db.objectStoreNames.contains('pagos_distribucion')) {
-          const distributionStore = db.createObjectStore('pagos_distribucion', { keyPath: 'id' });
-          distributionStore.createIndex('pago_id', 'pago_id', { unique: false });
-          distributionStore.createIndex('contrato_id', 'contrato_id', { unique: false });
-        }
-
-        // Tabla de sincronización
-        if (!db.objectStoreNames.contains('sync_queue')) {
-          const syncStore = db.createObjectStore('sync_queue', { 
-            keyPath: 'id',
-            autoIncrement: true 
-          });
-          syncStore.createIndex('estado', 'estado', { unique: false });
-          syncStore.createIndex('tabla', 'tabla', { unique: false });
-          syncStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
-        }
-
-        // Tabla de configuración
-        if (!db.objectStoreNames.contains('configuracion')) {
-          const configStore = db.createObjectStore('configuracion', { keyPath: 'key' });
-        }
-
-        // Tabla de conflictos
-        if (!db.objectStoreNames.contains('conflictos')) {
-          const conflictStore = db.createObjectStore('conflictos', { keyPath: 'id' });
-          conflictStore.createIndex('resuelto', 'resuelto', { unique: false });
-        }
-
-        // Tabla de backups
-        if (!db.objectStoreNames.contains('backups')) {
-          const backupStore = db.createObjectStore('backups', { keyPath: 'id' });
-          backupStore.createIndex('fecha', 'fecha', { unique: false });
-        }
-
         console.log('✅ Estructura de IndexedDB creada/actualizada');
       };
     });
@@ -128,22 +49,123 @@ class LocalDatabase {
     return this.initPromise;
   }
 
-  // Métodos CRUD genéricos
-  async add(storeName, data) {
-    await this.init();
+  createObjectStores(db) {
+    // Tabla de usuarios
+    if (!db.objectStoreNames.contains('usuarios')) {
+      const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
+      userStore.createIndex('auth_id', 'auth_id', { unique: true });
+      userStore.createIndex('email', 'email', { unique: true });
+      userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
+    }
+
+    // Tabla de empresas
+    if (!db.objectStoreNames.contains('empresas')) {
+      const companyStore = db.createObjectStore('empresas', { keyPath: 'id' });
+      companyStore.createIndex('auth_id', 'auth_id', { unique: false });
+      companyStore.createIndex('nombre', 'nombre', { unique: false });
+      companyStore.createIndex('estado', 'estado', { unique: false });
+    }
+
+    // Tabla de contratos
+    if (!db.objectStoreNames.contains('contratos')) {
+      const contractStore = db.createObjectStore('contratos', { keyPath: 'id' });
+      contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
+      contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false });
+      contractStore.createIndex('estado', 'estado', { unique: false });
+      contractStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
+    }
+
+    // Tabla de suplementos
+    if (!db.objectStoreNames.contains('suplementos')) {
+      const supplementStore = db.createObjectStore('suplementos', { keyPath: 'id' });
+      supplementStore.createIndex('contrato_id', 'contrato_id', { unique: false });
+      supplementStore.createIndex('fecha_suplemento', 'fecha_suplemento', { unique: false });
+    }
+
+    // Tabla de certificaciones
+    if (!db.objectStoreNames.contains('certificaciones')) {
+      const certificationStore = db.createObjectStore('certificaciones', { keyPath: 'id' });
+      certificationStore.createIndex('contrato_id', 'contrato_id', { unique: false });
+      certificationStore.createIndex('mes', 'mes', { unique: false });
+      certificationStore.createIndex('pagado', 'pagado', { unique: false });
+    }
+
+    // Tabla de pagos
+    if (!db.objectStoreNames.contains('pagos')) {
+      const paymentStore = db.createObjectStore('pagos', { keyPath: 'id' });
+      paymentStore.createIndex('empresa_id', 'empresa_id', { unique: false });
+      paymentStore.createIndex('fecha_pago', 'fecha_pago', { unique: false });
+      paymentStore.createIndex('tipo', 'tipo', { unique: false });
+    }
+
+    // Tabla de distribución de pagos
+    if (!db.objectStoreNames.contains('pagos_distribucion')) {
+      const distributionStore = db.createObjectStore('pagos_distribucion', { keyPath: 'id' });
+      distributionStore.createIndex('pago_id', 'pago_id', { unique: false });
+      distributionStore.createIndex('contrato_id', 'contrato_id', { unique: false });
+    }
+
+    // Tabla de sincronización
+    if (!db.objectStoreNames.contains('sync_queue')) {
+      const syncStore = db.createObjectStore('sync_queue', { 
+        keyPath: 'id',
+        autoIncrement: true 
+      });
+      syncStore.createIndex('estado', 'estado', { unique: false });
+      syncStore.createIndex('tabla', 'tabla', { unique: false });
+      syncStore.createIndex('fecha_creacion', 'fecha_creacion', { unique: false });
+    }
+
+    // Tabla de configuración
+    if (!db.objectStoreNames.contains('configuracion')) {
+      const configStore = db.createObjectStore('configuracion', { keyPath: 'key' });
+    }
+
+    // Tabla de conflictos
+    if (!db.objectStoreNames.contains('conflictos')) {
+      const conflictStore = db.createObjectStore('conflictos', { keyPath: 'id' });
+      conflictStore.createIndex('resuelto', 'resuelto', { unique: false });
+    }
+
+    // Tabla de backups
+    if (!db.objectStoreNames.contains('backups')) {
+      const backupStore = db.createObjectStore('backups', { keyPath: 'id' });
+      backupStore.createIndex('fecha', 'fecha', { unique: false });
+    }
+  }
+
+  async ensureInitialized() {
+    if (!this.isInitialized) {
+      await this.init();
+    }
+    return this.db;
+  }
+
+  // Método set (insertar o actualizar)
+  async set(storeName, data) {
+    await this.ensureInitialized();
     
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([storeName], 'readwrite');
       const store = transaction.objectStore(storeName);
-      const request = store.add(data);
+      
+      // Usamos put que hace insert o update automáticamente
+      const request = store.put(data);
 
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = (event) => reject(event.target.error);
+      request.onsuccess = () => {
+        console.log(`✅ Datos guardados en ${storeName}:`, data.id || 'nuevo registro');
+        resolve(request.result);
+      };
+      
+      request.onerror = (event) => {
+        console.error(`❌ Error guardando en ${storeName}:`, event.target.error);
+        reject(event.target.error);
+      };
     });
   }
 
   async get(storeName, id) {
-    await this.init();
+    await this.ensureInitialized();
     
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([storeName], 'readonly');
@@ -155,45 +177,38 @@ class LocalDatabase {
     });
   }
 
-  async getAll(storeName, indexName = null, query = null) {
-    await this.init();
+  async getAll(storeName) {
+    await this.ensureInitialized();
     
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
-      
-      let request;
-      if (indexName && query !== undefined) {
-        const index = store.index(indexName);
-        const keyRange = IDBKeyRange.only(query);
-        request = index.getAll(keyRange);
-      } else if (indexName) {
-        const index = store.index(indexName);
-        request = index.getAll();
-      } else {
-        request = store.getAll();
-      }
+      const request = store.getAll();
 
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = (event) => reject(event.target.error);
     });
   }
 
-  async update(storeName, data) {
-    await this.init();
+  async add(storeName, data) {
+    await this.ensureInitialized();
     
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([storeName], 'readwrite');
       const store = transaction.objectStore(storeName);
-      const request = store.put(data);
+      const request = store.add(data);
 
       request.onsuccess = () => resolve(request.result);
       request.onerror = (event) => reject(event.target.error);
     });
   }
 
+  async update(storeName, data) {
+    return this.set(storeName, data); // set ya hace update
+  }
+
   async delete(storeName, id) {
-    await this.init();
+    await this.ensureInitialized();
     
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([storeName], 'readwrite');
@@ -206,7 +221,7 @@ class LocalDatabase {
   }
 
   async getByIndex(storeName, indexName, key) {
-    await this.init();
+    await this.ensureInitialized();
     
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([storeName], 'readonly');
@@ -220,7 +235,7 @@ class LocalDatabase {
   }
 
   async getAllByIndex(storeName, indexName, key) {
-    await this.init();
+    await this.ensureInitialized();
     
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([storeName], 'readonly');
@@ -231,411 +246,6 @@ class LocalDatabase {
 
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = (event) => reject(event.target.error);
-    });
-  }
-
-  // Método set para compatibilidad con supabase.js (inserta o actualiza)
-  async set(storeName, data) {
-    await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction([storeName], 'readwrite');
-      const store = transaction.objectStore(storeName);
-      const request = store.put(data); // put hace insert o update según si existe el id
-
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = (event) => reject(event.target.error);
-    });
-  }
-
-  // Método para obtener items de sincronización pendientes
-  async getPendingSyncItems(limit = 50) {
-    await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['sync_queue'], 'readonly');
-      const store = transaction.objectStore('sync_queue');
-      
-      // Obtener todos los items
-      const request = store.getAll();
-      
-      request.onsuccess = () => {
-        const items = request.result || [];
-        
-        // Filtrar manualmente items pendientes (estado = 'pendiente')
-        const pendingItems = items.filter(item => item.estado === 'pendiente');
-        
-        // Ordenar por fecha_creacion (más antiguos primero)
-        pendingItems.sort((a, b) => {
-          const dateA = new Date(a.fecha_creacion || 0);
-          const dateB = new Date(b.fecha_creacion || 0);
-          return dateA - dateB;
-        });
-        
-        // Limitar cantidad
-        resolve(pendingItems.slice(0, limit));
-      };
-
-      request.onerror = (event) => {
-        console.error('Error al obtener items de sincronización:', event.target.error);
-        reject(event.target.error);
-      };
-    });
-  }
-
-  // Método para agregar a la cola de sincronización
-  async addToSyncQueue(action, table, recordId, data) {
-    const syncItem = {
-      action: action, // 'INSERT', 'UPDATE', 'DELETE'
-      table: table,
-      record_id: recordId,
-      data: data,
-      estado: 'pendiente', // 'pendiente', 'procesando', 'completado', 'error'
-      intentos: 0,
-      fecha_creacion: new Date().toISOString(),
-      fecha_actualizacion: new Date().toISOString()
-    };
-
-    return this.add('sync_queue', syncItem);
-  }
-
-  // Método para marcar item como procesado
-  async markSyncItemProcessed(syncId, success = true, error = null) {
-    const item = await this.get('sync_queue', syncId);
-    if (item) {
-      item.estado = success ? 'completado' : 'error';
-      item.intentos += 1;
-      item.error = error;
-      item.fecha_actualizacion = new Date().toISOString();
-      await this.update('sync_queue', item);
-    }
-  }
-
-  async incrementSyncAttempts(syncId) {
-    const item = await this.get('sync_queue', syncId);
-    if (item) {
-      item.intentos += 1;
-      item.fecha_actualizacion = new Date().toISOString();
-      await this.update('sync_queue', item);
-    }
-  }
-
-  async cleanupOldSyncItems(days = 7) {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-    
-    const allItems = await this.getAll('sync_queue');
-    const oldItems = allItems.filter(item => {
-      const itemDate = new Date(item.fecha_creacion);
-      return itemDate < cutoffDate && item.estado === 'completado';
-    });
-
-    let deletedCount = 0;
-    for (const item of oldItems) {
-      try {
-        await this.delete('sync_queue', item.id);
-        deletedCount++;
-      } catch (error) {
-        console.error('Error eliminando item antiguo:', error);
-      }
-    }
-
-    console.log(`🗑️ Limpiados ${deletedCount} items de sincronización antiguos`);
-    return deletedCount;
-  }
-
-  async getStats() {
-    const stores = [
-      'usuarios', 'empresas', 'contratos', 'suplementos', 
-      'certificaciones', 'pagos', 'sync_queue', 'configuracion'
-    ];
-
-    const stats = {};
-    let totalItems = 0;
-    
-    for (const storeName of stores) {
-      try {
-        const items = await this.getAll(storeName);
-        const count = items ? items.length : 0;
-        stats[storeName] = count;
-        totalItems += count;
-      } catch (error) {
-        stats[storeName] = 0;
-      }
-    }
-
-    stats.total = totalItems;
-    stats.lastUpdated = new Date().toISOString();
-    
-    return stats;
-  }
-
-  async exportToJSON() {
-    await this.init();
-    
-    const exportData = {};
-    const storeNames = Array.from(this.db.objectStoreNames);
-    
-    for (const storeName of storeNames) {
-      try {
-        exportData[storeName] = await this.getAll(storeName);
-      } catch (error) {
-        console.error(`Error al exportar ${storeName}:`, error);
-        exportData[storeName] = [];
-      }
-    }
-
-    // Agregar metadatos
-    exportData._metadata = {
-      exportDate: new Date().toISOString(),
-      dbName: this.dbName,
-      dbVersion: this.dbVersion,
-      totalStores: storeNames.length,
-      appVersion: '2.0.0'
-    };
-
-    return exportData;
-  }
-
-  async importFromJSON(jsonData) {
-    await this.init();
-    
-    if (!jsonData || typeof jsonData !== 'object') {
-      throw new Error('Datos JSON inválidos');
-    }
-
-    const storeNames = Array.from(this.db.objectStoreNames);
-    let importedCount = 0;
-    let errorCount = 0;
-
-    for (const storeName of storeNames) {
-      if (jsonData[storeName] && Array.isArray(jsonData[storeName])) {
-        const items = jsonData[storeName];
-        
-        for (const item of items) {
-          try {
-            // Verificar si el item ya existe
-            const existing = await this.get(storeName, item.id);
-            if (existing) {
-              await this.update(storeName, item);
-            } else {
-              await this.add(storeName, item);
-            }
-            importedCount++;
-          } catch (error) {
-            console.error(`Error al importar item en ${storeName}:`, error);
-            errorCount++;
-          }
-        }
-      }
-    }
-
-    return {
-      success: errorCount === 0,
-      imported: importedCount,
-      errors: errorCount,
-      totalStores: storeNames.length
-    };
-  }
-
-  async autoBackup() {
-    try {
-      const backupData = await this.exportToJSON();
-      const backupKey = `backup_${new Date().toISOString().replace(/[:.]/g, '-')}`;
-      
-      // Guardar backup en localStorage como fallback
-      const backupString = JSON.stringify(backupData);
-      if (backupString.length < 5 * 1024 * 1024) { // 5MB limit
-        localStorage.setItem(backupKey, backupString);
-      }
-      
-      // También guardar en IndexedDB
-      await this.add('backups', {
-        id: backupKey,
-        data: backupData,
-        fecha: new Date().toISOString(),
-        size: backupString.length
-      });
-
-      // Mantener solo los últimos 5 backups
-      const backupKeys = Object.keys(localStorage)
-        .filter(key => key.startsWith('backup_'))
-        .sort()
-        .reverse();
-      
-      if (backupKeys.length > 5) {
-        for (let i = 5; i < backupKeys.length; i++) {
-          localStorage.removeItem(backupKeys[i]);
-        }
-      }
-
-      console.log(`✅ Backup automático realizado: ${backupKey}`);
-      return {
-        success: true,
-        key: backupKey,
-        date: new Date().toISOString(),
-        itemCount: Object.values(backupData).reduce((sum, arr) => sum + (arr.length || 0), 0)
-      };
-    } catch (error) {
-      console.error('Error en backup automático:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async restoreFromBackup(backupKey) {
-    try {
-      let backupData;
-      
-      // Intentar desde localStorage primero
-      const localStorageData = localStorage.getItem(backupKey);
-      if (localStorageData) {
-        backupData = JSON.parse(localStorageData);
-      } else {
-        // Intentar desde IndexedDB
-        const backupRecord = await this.get('backups', backupKey);
-        if (!backupRecord) {
-          throw new Error(`Backup ${backupKey} no encontrado`);
-        }
-        backupData = backupRecord.data;
-      }
-
-      const result = await this.importFromJSON(backupData);
-
-      console.log(`✅ Restauración completada desde ${backupKey}`);
-      return {
-        success: true,
-        backupKey: backupKey,
-        ...result
-      };
-    } catch (error) {
-      console.error('Error en restauración:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async cleanupOldData(days = 365) {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-    
-    let cleanedCount = 0;
-    const storesToClean = ['certificaciones', 'pagos'];
-
-    for (const storeName of storesToClean) {
-      try {
-        const items = await this.getAll(storeName);
-        const oldItems = items.filter(item => {
-          const itemDate = new Date(item.fecha_creacion || item.fecha_pago || item.mes || 0);
-          return itemDate < cutoffDate;
-        });
-
-        for (const item of oldItems) {
-          await this.delete(storeName, item.id);
-          cleanedCount++;
-        }
-      } catch (error) {
-        console.error(`Error al limpiar ${storeName}:`, error);
-      }
-    }
-
-    console.log(`🗑️ Limpiados ${cleanedCount} registros antiguos`);
-    return cleanedCount;
-  }
-
-  async migrateFromLocalStorage() {
-    try {
-      const legacyData = localStorage.getItem('commissionManagerData');
-      if (!legacyData) {
-        return { success: true, migrated: 0, message: 'No hay datos legacy para migrar' };
-      }
-
-      const parsedData = JSON.parse(legacyData);
-      let migratedCount = 0;
-
-      // Mapear datos legacy
-      if (parsedData.empresas) {
-        for (const empresa of parsedData.empresas) {
-          try {
-            await this.add('empresas', {
-              id: empresa.id || `legacy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              ...empresa,
-              fecha_creacion: new Date().toISOString(),
-              fecha_actualizacion: new Date().toISOString()
-            });
-            migratedCount++;
-          } catch (error) {
-            console.error('Error migrando empresa:', error);
-          }
-        }
-      }
-
-      // Limpiar datos legacy después de migrar
-      localStorage.removeItem('commissionManagerData');
-
-      return {
-        success: true,
-        migrated: migratedCount,
-        message: `Migrados ${migratedCount} registros desde localStorage`
-      };
-    } catch (error) {
-      console.error('Error en migración:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async checkIntegrity() {
-    const issues = [];
-    const storeNames = Array.from(this.db.objectStoreNames);
-
-    for (const storeName of storeNames) {
-      try {
-        const count = (await this.getAll(storeName)).length;
-        console.log(`✓ ${storeName}: ${count} registros`);
-      } catch (error) {
-        issues.push({
-          store: storeName,
-          error: error.message
-        });
-        console.error(`✗ ${storeName}: Error - ${error.message}`);
-      }
-    }
-
-    return {
-      status: issues.length === 0 ? 'OK' : 'ISSUES',
-      stores: storeNames.length,
-      issues: issues,
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  async resetDatabase() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.deleteDatabase(this.dbName);
-
-      request.onsuccess = () => {
-        console.log('Base de datos eliminada');
-        this.db = null;
-        this.initPromise = null;
-        resolve(true);
-      };
-
-      request.onerror = (event) => {
-        console.error('Error al eliminar base de datos:', event.target.error);
-        reject(event.target.error);
-      };
-
-      request.onblocked = () => {
-        console.warn('Base de datos bloqueada para eliminación');
-        reject(new Error('Base de datos bloqueada. Cierre todas las pestañas y reintente.'));
-      };
     });
   }
 
@@ -673,153 +283,106 @@ class LocalDatabase {
     });
   }
 
-  async cleanupDuplicateEmpresas() {
-    try {
-      const empresas = await this.getAll('empresas');
-      const empresasMap = new Map();
-      let deletedCount = 0;
-      
-      for (const empresa of empresas) {
-        const key = `${empresa.auth_id}_${empresa.nombre}`;
-        
-        if (empresasMap.has(key)) {
-          // Empresa duplicada, eliminar
-          await this.delete('empresas', empresa.id);
-          deletedCount++;
-        } else {
-          empresasMap.set(key, empresa);
-        }
+  // Métodos de sincronización
+  async addToSyncQueue(action, table, recordId, data) {
+    const syncItem = {
+      action: action,
+      table: table,
+      record_id: recordId,
+      data: data,
+      estado: 'pendiente',
+      intentos: 0,
+      fecha_creacion: new Date().toISOString(),
+      fecha_actualizacion: new Date().toISOString()
+    };
+
+    return this.add('sync_queue', syncItem);
+  }
+
+  async getPendingSyncItems() {
+    const allItems = await this.getAll('sync_queue');
+    return allItems.filter(item => item.estado === 'pendiente');
+  }
+
+  // Métodos de backup y utilidades
+  async exportToJSON() {
+    await this.ensureInitialized();
+    
+    const exportData = {};
+    const storeNames = Array.from(this.db.objectStoreNames);
+    
+    for (const storeName of storeNames) {
+      try {
+        exportData[storeName] = await this.getAll(storeName);
+      } catch (error) {
+        console.error(`Error al exportar ${storeName}:`, error);
+        exportData[storeName] = [];
       }
-      
-      console.log(`🗑️ Eliminadas ${deletedCount} empresas duplicadas`);
-      return deletedCount;
-    } catch (error) {
-      console.error('Error limpiando empresas duplicadas:', error);
-      return 0;
     }
+
+    exportData._metadata = {
+      exportDate: new Date().toISOString(),
+      dbName: this.dbName,
+      dbVersion: this.dbVersion,
+      appVersion: '2.0.0'
+    };
+
+    return exportData;
   }
 
-  async getDetailedStats() {
-    const stats = await this.getStats();
-    
-    try {
-      // Estadísticas de certificaciones por estado
-      const certificaciones = await this.getAll('certificaciones');
-      stats.certificaciones_pagadas = certificaciones.filter(c => c.pagado).length;
-      stats.certificaciones_pendientes = certificaciones.filter(c => !c.pagado).length;
-      
-      // Estadísticas de contratos por estado
-      const contratos = await this.getAll('contratos');
-      stats.contratos_activos = contratos.filter(c => c.estado === 'activo').length;
-      stats.contratos_completados = contratos.filter(c => c.estado === 'completado').length;
-      stats.contratos_cancelados = contratos.filter(c => c.estado === 'cancelado').length;
-      
-      // Total de montos
-      stats.total_monto_contratos = contratos.reduce((sum, c) => sum + (c.monto_base || 0), 0);
-      stats.total_comisiones = certificaciones.reduce((sum, c) => 
-        sum + (c.comision_editada || c.comision_calculada || 0), 0);
-      stats.total_comisiones_pagadas = certificaciones
-        .filter(c => c.pagado)
-        .reduce((sum, c) => sum + (c.comision_editada || c.comision_calculada || 0), 0);
-      
-    } catch (error) {
-      console.error('Error obteniendo estadísticas detalladas:', error);
-    }
-    
-    return stats;
+  async resetDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(this.dbName);
+
+      request.onsuccess = () => {
+        console.log('Base de datos eliminada');
+        this.db = null;
+        this.isInitialized = false;
+        this.initPromise = null;
+        resolve(true);
+      };
+
+      request.onerror = (event) => {
+        console.error('Error al eliminar base de datos:', event.target.error);
+        reject(event.target.error);
+      };
+    });
   }
 
-  async verifyAndRepair() {
-    console.log('🔍 Verificando integridad de la base de datos...');
-    
+  async checkIntegrity() {
     const issues = [];
-    
-    try {
-      // Verificar que todas las tablas existan
-      const storeNames = Array.from(this.db.objectStoreNames);
-      const requiredStores = [
-        'usuarios', 'empresas', 'contratos', 'certificaciones',
-        'pagos', 'sync_queue', 'configuracion'
-      ];
-      
-      for (const store of requiredStores) {
-        if (!storeNames.includes(store)) {
-          issues.push(`Falta la tabla: ${store}`);
-        }
-      }
-      
-      // Verificar índices necesarios
-      const empresasStore = this.db.transaction(['empresas'], 'readonly').objectStore('empresas');
-      if (!empresasStore.indexNames.contains('auth_id')) {
-        issues.push('Falta índice auth_id en tabla empresas');
-      }
-      
-      if (issues.length === 0) {
-        console.log('✅ Base de datos verificada correctamente');
-        return {
-          success: true,
-          message: 'Base de datos en buen estado',
-          issues: []
-        };
-      } else {
-        console.warn(`⚠️ Se encontraron ${issues.length} problemas:`, issues);
-        return {
-          success: false,
-          message: 'Se encontraron problemas en la base de datos',
-          issues: issues
-        };
-      }
-      
-    } catch (error) {
-      console.error('Error verificando base de datos:', error);
-      return {
-        success: false,
-        message: 'Error al verificar base de datos',
-        error: error.message,
-        issues: []
-      };
-    }
-  }
+    const storeNames = Array.from(this.db.objectStoreNames);
 
-  async optimize() {
-    console.log('⚡ Optimizando base de datos...');
-    
-    try {
-      // Limpiar items de sincronización antiguos
-      await this.cleanupOldSyncItems();
-      
-      // Limpiar datos antiguos
-      await this.cleanupOldData(180); // 6 meses
-      
-      // Limpiar empresas duplicadas
-      await this.cleanupDuplicateEmpresas();
-      
-      // Crear backup automático
-      await this.autoBackup();
-      
-      console.log('✅ Base de datos optimizada');
-      return {
-        success: true,
-        message: 'Base de datos optimizada correctamente'
-      };
-    } catch (error) {
-      console.error('Error optimizando base de datos:', error);
-      return {
-        success: false,
-        message: 'Error al optimizar base de datos',
-        error: error.message
-      };
+    for (const storeName of storeNames) {
+      try {
+        const count = (await this.getAll(storeName)).length;
+        console.log(`✓ ${storeName}: ${count} registros`);
+      } catch (error) {
+        issues.push({
+          store: storeName,
+          error: error.message
+        });
+        console.error(`✗ ${storeName}: Error - ${error.message}`);
+      }
     }
+
+    return {
+      status: issues.length === 0 ? 'OK' : 'ISSUES',
+      stores: storeNames.length,
+      issues: issues
+    };
   }
 }
 
-// Crear instancia única
+// Crear y exportar instancia única
 const localDB = new LocalDatabase();
+
+// Inicializar automáticamente
+localDB.init().catch(error => {
+  console.error('Error al inicializar IndexedDB:', error);
+});
 
 // Hacer disponible globalmente
 window.localDB = localDB;
-
-// Inicializar automáticamente cuando se importa
-localDB.init().catch(console.error);
 
 export { localDB };
