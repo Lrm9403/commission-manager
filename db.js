@@ -3,7 +3,7 @@ class LocalDatabase {
   constructor() {
     this.db = null;
     this.dbName = 'CommissionManagerDB';
-    this.dbVersion = 6;
+    this.dbVersion = 7; // Incrementado para forzar actualización
     this.initPromise = null;
     this.isInitialized = false;
   }
@@ -50,34 +50,37 @@ class LocalDatabase {
   }
 
   createObjectStores(db) {
-    // Eliminar store existente si tiene problema de índice único
-    if (db.objectStoreNames.contains('usuarios')) {
-      db.deleteObjectStore('usuarios');
+    // Tabla de usuarios
+    if (!db.objectStoreNames.contains('usuarios')) {
+      const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
+      userStore.createIndex('auth_id', 'auth_id', { unique: true });
+      userStore.createIndex('email', 'email', { unique: true });
+      userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
     }
-    
-    // Tabla de usuarios (con índice UNIQUE corregido)
-    const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
-    userStore.createIndex('auth_id', 'auth_id', { unique: true });
-    userStore.createIndex('email', 'email', { unique: true }); // Este será único
-    userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
 
-    // Tabla de empresas
+    // Tabla de empresas (CORREGIDO: keyPath correcto)
     if (!db.objectStoreNames.contains('empresas')) {
-      const companyStore = db.createObjectStore('empresas', { keyPath: 'id', autoIncrement: true });
-      companyStore.createIndex('auth_id', 'auth_id', { unique: false });
+      const companyStore = db.createObjectStore('empresas', { 
+        keyPath: 'id', 
+        autoIncrement: true 
+      });
+      companyStore.createIndex('user_id', 'user_id', { unique: false });
       companyStore.createIndex('nombre', 'nombre', { unique: false });
       companyStore.createIndex('estado', 'estado', { unique: false });
+      companyStore.createIndex('sync_status', 'sync_status', { unique: false });
     } else {
       // Actualizar store existente
       const companyStore = db.transaction.objectStore('empresas');
-      try { companyStore.createIndex('auth_id', 'auth_id', { unique: false }); } catch(e) {}
-      try { companyStore.createIndex('nombre', 'nombre', { unique: false }); } catch(e) {}
-      try { companyStore.createIndex('estado', 'estado', { unique: false }); } catch(e) {}
+      try { companyStore.createIndex('user_id', 'user_id', { unique: false }); } catch(e) {}
+      try { companyStore.createIndex('sync_status', 'sync_status', { unique: false }); } catch(e) {}
     }
 
     // Tabla de contratos
     if (!db.objectStoreNames.contains('contratos')) {
-      const contractStore = db.createObjectStore('contratos', { keyPath: 'id', autoIncrement: true });
+      const contractStore = db.createObjectStore('contratos', { 
+        keyPath: 'id', 
+        autoIncrement: true 
+      });
       contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
       contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false });
       contractStore.createIndex('estado', 'estado', { unique: false });
@@ -86,14 +89,20 @@ class LocalDatabase {
 
     // Tabla de suplementos
     if (!db.objectStoreNames.contains('suplementos')) {
-      const supplementStore = db.createObjectStore('suplementos', { keyPath: 'id', autoIncrement: true });
+      const supplementStore = db.createObjectStore('suplementos', { 
+        keyPath: 'id', 
+        autoIncrement: true 
+      });
       supplementStore.createIndex('contrato_id', 'contrato_id', { unique: false });
       supplementStore.createIndex('fecha_suplemento', 'fecha_suplemento', { unique: false });
     }
 
     // Tabla de certificaciones
     if (!db.objectStoreNames.contains('certificaciones')) {
-      const certificationStore = db.createObjectStore('certificaciones', { keyPath: 'id', autoIncrement: true });
+      const certificationStore = db.createObjectStore('certificaciones', { 
+        keyPath: 'id', 
+        autoIncrement: true 
+      });
       certificationStore.createIndex('contrato_id', 'contrato_id', { unique: false });
       certificationStore.createIndex('mes', 'mes', { unique: false });
       certificationStore.createIndex('pagado', 'pagado', { unique: false });
@@ -101,7 +110,10 @@ class LocalDatabase {
 
     // Tabla de pagos
     if (!db.objectStoreNames.contains('pagos')) {
-      const paymentStore = db.createObjectStore('pagos', { keyPath: 'id', autoIncrement: true });
+      const paymentStore = db.createObjectStore('pagos', { 
+        keyPath: 'id', 
+        autoIncrement: true 
+      });
       paymentStore.createIndex('empresa_id', 'empresa_id', { unique: false });
       paymentStore.createIndex('fecha_pago', 'fecha_pago', { unique: false });
       paymentStore.createIndex('tipo', 'tipo', { unique: false });
@@ -109,7 +121,10 @@ class LocalDatabase {
 
     // Tabla de distribución de pagos
     if (!db.objectStoreNames.contains('pagos_distribucion')) {
-      const distributionStore = db.createObjectStore('pagos_distribucion', { keyPath: 'id', autoIncrement: true });
+      const distributionStore = db.createObjectStore('pagos_distribucion', { 
+        keyPath: 'id', 
+        autoIncrement: true 
+      });
       distributionStore.createIndex('pago_id', 'pago_id', { unique: false });
       distributionStore.createIndex('contrato_id', 'contrato_id', { unique: false });
     }
@@ -132,13 +147,19 @@ class LocalDatabase {
 
     // Tabla de conflictos
     if (!db.objectStoreNames.contains('conflictos')) {
-      const conflictStore = db.createObjectStore('conflictos', { keyPath: 'id', autoIncrement: true });
+      const conflictStore = db.createObjectStore('conflictos', { 
+        keyPath: 'id', 
+        autoIncrement: true 
+      });
       conflictStore.createIndex('resuelto', 'resuelto', { unique: false });
     }
 
     // Tabla de backups
     if (!db.objectStoreNames.contains('backups')) {
-      const backupStore = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
+      const backupStore = db.createObjectStore('backups', { 
+        keyPath: 'id', 
+        autoIncrement: true 
+      });
       backupStore.createIndex('fecha', 'fecha', { unique: false });
     }
   }
@@ -160,19 +181,15 @@ class LocalDatabase {
       
       // Verificar si el objeto tiene ID
       if (!data.id) {
-        if (store.keyPath && typeof store.keyPath === 'string') {
-          // Generar ID automáticamente si la store tiene autoIncrement
-          delete data.id;
-        } else {
-          data.id = this.generateUUID();
-        }
+        // Generar ID temporal si no existe
+        data.id = this.generateUUID();
       }
       
       // Usamos put que hace insert o update automáticamente
       const request = store.put(data);
 
       request.onsuccess = () => {
-        console.log(`✅ Datos guardados en ${storeName}:`, data.id || 'nuevo registro');
+        console.log(`✅ Datos guardados en ${storeName}:`, data.id);
         resolve(request.result);
       };
       
@@ -216,22 +233,39 @@ class LocalDatabase {
       const transaction = this.db.transaction([storeName], 'readwrite');
       const store = transaction.objectStore(storeName);
       
-      // No pasar ID si es autoincrement
-      if (store.keyPath && typeof store.keyPath === 'string' && data[store.keyPath] === undefined) {
-        delete data.id;
-      }
-      
-      const request = store.add(data);
+      // CORRECCIÓN CRÍTICA: No pasar ID si la store tiene autoIncrement
+      const keyPath = store.keyPath;
+      if (keyPath && typeof keyPath === 'string' && data[keyPath] !== undefined) {
+        // Crear copia sin el campo ID para evitar el error
+        const dataToAdd = { ...data };
+        delete dataToAdd[keyPath];
+        
+        const request = store.add(dataToAdd);
 
-      request.onsuccess = () => {
-        console.log(`✅ Datos agregados a ${storeName}:`, data);
-        resolve(request.result);
-      };
-      
-      request.onerror = (event) => {
-        console.error(`❌ Error agregando a ${storeName}:`, event.target.error);
-        reject(event.target.error);
-      };
+        request.onsuccess = (event) => {
+          const generatedId = event.target.result;
+          console.log(`✅ Datos agregados a ${storeName} con ID generado:`, generatedId);
+          resolve(generatedId);
+        };
+        
+        request.onerror = (event) => {
+          console.error(`❌ Error agregando a ${storeName}:`, event.target.error);
+          reject(event.target.error);
+        };
+      } else {
+        // Para stores sin autoIncrement
+        const request = store.add(data);
+
+        request.onsuccess = () => {
+          console.log(`✅ Datos agregados a ${storeName}:`, data);
+          resolve(request.result);
+        };
+        
+        request.onerror = (event) => {
+          console.error(`❌ Error agregando a ${storeName}:`, event.target.error);
+          reject(event.target.error);
+        };
+      }
     });
   }
 
@@ -338,8 +372,8 @@ class LocalDatabase {
     return this.getByIndex('usuarios', 'email', email);
   }
 
-  async getEmpresasByAuthId(authId) {
-    return this.getAllByIndex('empresas', 'auth_id', authId);
+  async getEmpresasByUser(userId) {
+    return this.getAllByIndex('empresas', 'user_id', userId);
   }
 
   async getContratosByEmpresa(empresaId) {
@@ -386,6 +420,23 @@ class LocalDatabase {
   async getPendingSyncItems() {
     const allItems = await this.getAll('sync_queue');
     return allItems.filter(item => item.estado === 'pendiente');
+  }
+
+  async cleanupOldSyncItems() {
+    try {
+      const items = await this.getAll('sync_queue');
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
+      
+      for (const item of items) {
+        const itemDate = new Date(item.fecha_creacion);
+        if (itemDate < thirtyDaysAgo || item.intentos >= 5) {
+          await this.delete('sync_queue', item.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error limpiando items antiguos:', error);
+    }
   }
 
   // Métodos de backup y utilidades
