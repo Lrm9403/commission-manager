@@ -114,12 +114,14 @@ class EmpresasManager {
     try {
       const empresa = await localDB.get('empresas', id);
       
-      // Filtrar empresas eliminadas lógicamente
-      if (empresa && empresa.deleted_at) {
-        return null;
+      // Filtrar empresas eliminadas lógicamente y del usuario actual
+      if (empresa && 
+          empresa.user_id === this.currentUser?.id && 
+          !empresa.deleted_at) {
+        return empresa;
       }
       
-      return empresa;
+      return null;
     } catch (error) {
       console.error('Error obteniendo empresa:', error);
       return null;
@@ -177,23 +179,16 @@ class EmpresasManager {
       };
 
       // Actualizar en IndexedDB
-      const success = await localDB.update('empresas', id, empresaActualizada);
+      await localDB.update('empresas', id, empresaActualizada);
       
-      if (success) {
-        // Agregar a cola de sincronización
-        await syncManager.addChangeForSync('empresas', 'UPDATE', empresaActualizada);
-        
-        return {
-          success: true,
-          empresa: empresaActualizada,
-          message: 'Empresa actualizada correctamente'
-        };
-      } else {
-        return {
-          success: false,
-          error: 'Error al actualizar empresa localmente'
-        };
-      }
+      // Agregar a cola de sincronización
+      await syncManager.addChangeForSync('empresas', 'UPDATE', empresaActualizada);
+      
+      return {
+        success: true,
+        empresa: empresaActualizada,
+        message: 'Empresa actualizada correctamente'
+      };
     } catch (error) {
       console.error('Error actualizando empresa:', error);
       return {
