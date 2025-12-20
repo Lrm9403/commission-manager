@@ -4,13 +4,48 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 const supabaseUrl = 'https://axpgwncduujxficolgyt.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4cGd3bmNkdXVqeGZpY29sZ3l0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU5MDU0NDgsImV4cCI6MjA4MTQ4MTQ0OH0.jCuEskTd5JJt7C_iS7_GzMwA7wOnGHQsT0tFzVLm9CE';
 
-// Crear cliente con configuración optimizada
+// CORRECCIÓN: Configuración optimizada para manejo de tokens
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
-    storage: window.localStorage,
+    detectSessionInUrl: false,
+    storage: {
+      getItem: (key) => {
+        try {
+          const item = localStorage.getItem(key);
+          // Validar que el token no esté corrupto
+          if (key === 'supabase.auth.token' && item) {
+            try {
+              JSON.parse(item);
+            } catch {
+              console.warn('Token corrupto detectado, limpiando...');
+              localStorage.removeItem(key);
+              localStorage.removeItem('supabase.auth.refresh-token');
+              return null;
+            }
+          }
+          return item;
+        } catch (error) {
+          console.error('Error reading from localStorage:', error);
+          return null;
+        }
+      },
+      setItem: (key, value) => {
+        try {
+          localStorage.setItem(key, value);
+        } catch (error) {
+          console.error('Error writing to localStorage:', error);
+        }
+      },
+      removeItem: (key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch (error) {
+          console.error('Error removing from localStorage:', error);
+        }
+      }
+    },
     storageKey: 'supabase.auth.token'
   },
   global: {
@@ -29,6 +64,9 @@ class SupabaseManager {
     this.profile = null;
     this.isOnline = navigator.onLine;
     this.isInitialized = false;
+    this.refreshInterval = null;
+    this.retryCount = 0;
+    this.maxRetries = 3;
     
     // Inicializar listeners de conexión
     window.addEventListener('online', () => this.handleOnline());
@@ -51,7 +89,7 @@ class SupabaseManager {
         await window.localDB.init();
       }
 
-      // Restaurar sesión
+      // Restaurar sesión con manejo de errores mejorado
       await this.restoreSession();
       
       // Verificar conexión
@@ -87,10 +125,23 @@ class SupabaseManager {
   async restoreSession() {
     try {
       console.log('🔑 Restaurando sesión...');
+      
+      // Limpiar tokens corruptos antes de intentar
+      this.cleanCorruptTokens();
+      
       const { data: { session }, error } = await this.supabase.auth.getSession();
       
       if (error) {
         console.error('Error obteniendo sesión:', error);
+        
+        // CORRECCIÓN: Manejo específico de errores de token
+        if (error.message.includes('Invalid Refresh Token') || 
+            error.message.includes('Refresh Token Not Found')) {
+          console.log('⚠️ Token de refresco inválido, limpiando sesión...');
+          this.cleanCorruptTokens();
+          return null;
+        }
+        
         return null;
       }
       
@@ -98,6 +149,9 @@ class SupabaseManager {
         this.session = session;
         this.user = session.user;
         console.log('✅ Sesión restaurada:', this.user.email);
+        
+        // Reiniciar contador de reintentos
+        this.retryCount = 0;
         
         // Verificar si el email está confirmado
         if (this.user.email_confirmed_at) {
@@ -120,6 +174,25 @@ class SupabaseManager {
     } catch (error) {
       console.error('Error restaurando sesión:', error);
       return null;
+    }
+  }
+
+  cleanCorruptTokens() {
+    try {
+      const keys = ['supabase.auth.token', 'supabase.auth.refresh-token'];
+      keys.forEach(key => {
+        const item = localStorage.getItem(key);
+        if (item) {
+          try {
+            JSON.parse(item);
+          } catch {
+            console.log(`⚠️ Limpiando token corrupto: ${key}`);
+            localStorage.removeItem(key);
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error limpiando tokens:', error);
     }
   }
 
@@ -198,7 +271,7 @@ class SupabaseManager {
       return profileData;
     } catch (error) {
       console.error('❌ Error creando perfil inicial:', error);
-      throw error; // Propagamos el error para que lo maneje loadProfile
+      throw error;
     }
   }
 
@@ -234,7 +307,6 @@ class SupabaseManager {
       return emergencyProfile;
     } catch (error) {
       console.error('❌ Error crítico creando perfil de emergencia:', error);
-      // Devolvemos el perfil de emergencia de todos modos
       this.profile = emergencyProfile;
       return emergencyProfile;
     }
@@ -321,6 +393,9 @@ class SupabaseManager {
     console.log('🔑 Iniciando sesión:', email);
     
     try {
+      // Limpiar tokens antes de intentar login
+      this.cleanCorruptTokens();
+      
       const { data, error } = await this.supabase.auth.signInWithPassword({
         email,
         password
@@ -328,6 +403,19 @@ class SupabaseManager {
 
       if (error) {
         console.error('Error en login:', error);
+        
+        // CORRECCIÓN: Manejo específico de errores de token
+        if (error.message.includes('Invalid Refresh Token') || 
+            error.message.includes('Refresh Token Not Found')) {
+          this.cleanCorruptTokens();
+          return {
+            success: false,
+            error: 'Error de sesión. Por favor, intenta de nuevo.',
+            code: error.code,
+            needsReauth: true
+          };
+        }
+        
         return {
           success: false,
           error: this.translateAuthError(error.message),
@@ -337,6 +425,7 @@ class SupabaseManager {
 
       this.user = data.user;
       this.session = data.session;
+      this.retryCount = 0; // Reiniciar contador
       
       console.log('✅ Sesión iniciada:', data.user.email);
       
@@ -375,6 +464,10 @@ class SupabaseManager {
       this.session = null;
       this.profile = null;
       this.isInitialized = false;
+      this.retryCount = 0;
+      
+      // Limpiar localStorage completamente
+      this.cleanCorruptTokens();
       
       console.log('✅ Sesión cerrada');
       
@@ -396,7 +489,7 @@ class SupabaseManager {
     
     try {
       const localDB = await this.ensureLocalDB();
-      const empresas = await localDB.getEmpresasByAuthId(this.user.id);
+      const empresas = await localDB.getEmpresasByUser(this.user.id);
       
       console.log(`📊 Empresas encontradas: ${empresas.length}`);
       return empresas;
@@ -432,7 +525,7 @@ class SupabaseManager {
 
       const empresaCompleta = {
         id: empresaId,
-        auth_id: this.user.id,
+        user_id: this.user.id,
         nombre: empresaData.nombre.trim(),
         director: empresaData.director || '',
         descripcion: empresaData.descripcion || '',
@@ -443,7 +536,7 @@ class SupabaseManager {
       };
 
       // Guardar localmente
-      await localDB.set('empresas', empresaCompleta);
+      await localDB.add('empresas', empresaCompleta);
       
       console.log('✅ Empresa creada:', empresaCompleta.nombre);
       
@@ -482,7 +575,7 @@ class SupabaseManager {
         };
       }
 
-      if (empresaActual.auth_id !== this.user.id) {
+      if (empresaActual.user_id !== this.user.id) {
         return {
           success: false,
           error: 'No tienes permiso para modificar esta empresa'
@@ -543,7 +636,7 @@ class SupabaseManager {
         };
       }
 
-      if (empresaActual.auth_id !== this.user.id) {
+      if (empresaActual.user_id !== this.user.id) {
         return {
           success: false,
           error: 'No tienes permiso para eliminar esta empresa'
@@ -802,9 +895,9 @@ class SupabaseManager {
           let result;
           const dataForSupabase = { ...item.data };
           
-          // Para empresas, usar auth_id
+          // Para empresas, usar user_id
           if (item.table === 'empresas') {
-            dataForSupabase.auth_id = this.user.id;
+            dataForSupabase.user_id = this.user.id;
           }
 
           switch (item.action) {
@@ -891,7 +984,9 @@ class SupabaseManager {
       'User already registered': 'Usuario ya registrado',
       'Password should be at least 6 characters': 'La contraseña debe tener al menos 6 caracteres',
       'Invalid email': 'Email inválido',
-      'User not found': 'Usuario no encontrado'
+      'User not found': 'Usuario no encontrado',
+      'Invalid Refresh Token': 'Sesión expirada. Por favor, inicia sesión nuevamente.',
+      'Refresh Token Not Found': 'Sesión no encontrada. Por favor, inicia sesión nuevamente.'
     };
     
     return translations[errorMessage] || errorMessage;
@@ -936,6 +1031,13 @@ class SupabaseManager {
   async handleOnline() {
     console.log('🌐 Conexión restablecida');
     this.isOnline = true;
+    
+    // Intentar restaurar sesión
+    try {
+      await this.restoreSession();
+    } catch (error) {
+      console.error('Error restaurando sesión después de conexión:', error);
+    }
     
     // Sincronizar si el email está confirmado
     if (this.user?.email_confirmed_at) {
