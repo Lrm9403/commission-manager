@@ -1,23 +1,32 @@
-const CACHE_NAME = 'commission-manager-v2';
+const CACHE_NAME = 'commission-manager-v1';
 const urlsToCache = [
   './',
   './index.html',
-  './icons.css',
-  './icon-192x192.png',
-  './icon-512x512.png'
+  './styles.css'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+      .then(cache => {
+        console.log('Cache abierto');
+        return cache.addAll(urlsToCache);
+      })
+      .catch(err => {
+        console.log('Error al cachear:', err);
+      })
   );
 });
 
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
-      .then(response => response || fetch(event.request))
+      .then(response => {
+        if (response) {
+          return response;
+        }
+        return fetch(event.request);
+      })
   );
 });
 
