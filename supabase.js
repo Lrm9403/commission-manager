@@ -36,7 +36,55 @@ class SupabaseManager {
     
     console.log('🔧 Supabase Manager creado');
   }
+  
+async getLocalProfile(userId) {
+  try {
+    await this.ensureLocalDB();
+    const user = await this.localDB.getUserByAuthId(userId);
+    
+    if (user) {
+      console.log('👤 Perfil local encontrado:', user);
+      return user;
+    } else {
+      console.log('👤 No se encontró perfil local');
+      return null;
+    }
+  } catch (error) {
+    console.warn('⚠️ Error obteniendo perfil local:', error);
+    return null;
+  }
+}
 
+async createInitialProfile(authId, email, name) {
+  try {
+    await this.ensureLocalDB();
+    
+    const profileData = {
+      auth_id: authId,
+      email: email,
+      nombre: name || email.split('@')[0],
+      nombre_usuario: email.split('@')[0],
+      config_tema: 'light',
+      config_moneda: 'USD',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    const result = await this.localDB.saveUser(profileData);
+    
+    if (result) {
+      console.log('✅ Perfil inicial creado:', profileData);
+      return profileData;
+    } else {
+      console.error('❌ Error al crear perfil inicial');
+      throw new Error('No se pudo crear el perfil');
+    }
+  } catch (error) {
+    console.error('❌ Error creando perfil inicial:', error);
+    throw error;
+  }
+}
+  
   async init() {
     if (this.isInitialized) {
       console.log('✅ Supabase Manager ya inicializado');
