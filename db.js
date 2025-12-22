@@ -3,7 +3,7 @@ class LocalDatabase {
   constructor() {
     this.db = null;
     this.dbName = 'CommissionManagerDB';
-    this.dbVersion = 2; // Incrementar versión para forzar creación de tablas
+    this.dbVersion = 3; // FORZAR VERSIÓN 3 para que se ejecute onupgradeneeded
     this.isInitialized = false;
   }
 
@@ -12,7 +12,7 @@ class LocalDatabase {
       return this.db;
     }
 
-    console.log('🔧 Inicializando IndexedDB...');
+    console.log('🔧 Inicializando IndexedDB (v' + this.dbVersion + ')...');
     
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
@@ -25,96 +25,76 @@ class LocalDatabase {
       request.onsuccess = (event) => {
         this.db = event.target.result;
         this.isInitialized = true;
-        console.log(`✅ IndexedDB inicializada correctamente (v${this.dbVersion})`);
-        
-        // Verificar que las tablas existen
-        this.verifyTables().then(resolve).catch(reject);
+        console.log('✅ IndexedDB inicializada correctamente');
+        console.log('📊 Tablas disponibles:', Array.from(this.db.objectStoreNames));
+        resolve(this.db);
       };
 
       request.onupgradeneeded = (event) => {
+        console.log('🔄 EVENTO onupgradeneeded EJECUTÁNDOSE!');
+        console.log('📊 Actualizando de v' + event.oldVersion + ' a v' + event.newVersion);
+        
         const db = event.target.result;
-        console.log(`🔄 Actualizando DB de v${event.oldVersion} a v${event.newVersion}`);
         
-        // Crear todas las tablas si no existen
-        if (!db.objectStoreNames.contains('usuarios')) {
-          try {
-            const userStore = db.createObjectStore('usuarios', { keyPath: 'id' });
-            userStore.createIndex('auth_id', 'auth_id', { unique: true });
-            userStore.createIndex('email', 'email', { unique: false });
-            userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
-            console.log('✅ Tabla "usuarios" creada');
-          } catch (e) {
-            console.log('✅ Tabla "usuarios" ya existe');
-          }
-        }
-
-        if (!db.objectStoreNames.contains('empresas')) {
-          try {
-            const companyStore = db.createObjectStore('empresas', { keyPath: 'id', autoIncrement: true });
-            companyStore.createIndex('auth_id', 'auth_id', { unique: false });
-            companyStore.createIndex('nombre', 'nombre', { unique: false });
-            companyStore.createIndex('estado', 'estado', { unique: false });
-            console.log('✅ Tabla "empresas" creada');
-          } catch (e) {
-            console.log('✅ Tabla "empresas" ya existe');
-          }
-        }
-
-        if (!db.objectStoreNames.contains('contratos')) {
-          try {
-            const contractStore = db.createObjectStore('contratos', { keyPath: 'id', autoIncrement: true });
-            contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
-            contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false });
-            contractStore.createIndex('estado', 'estado', { unique: false });
-            console.log('✅ Tabla "contratos" creada');
-          } catch (e) {
-            console.log('✅ Tabla "contratos" ya existe');
-          }
-        }
-
-        if (!db.objectStoreNames.contains('certificaciones')) {
-          try {
-            const certificationStore = db.createObjectStore('certificaciones', { keyPath: 'id', autoIncrement: true });
-            certificationStore.createIndex('contrato_id', 'contrato_id', { unique: false });
-            certificationStore.createIndex('mes', 'mes', { unique: false });
-            certificationStore.createIndex('pagado', 'pagado', { unique: false });
-            console.log('✅ Tabla "certificaciones" creada');
-          } catch (e) {
-            console.log('✅ Tabla "certificaciones" ya existe');
-          }
-        }
-
-        if (!db.objectStoreNames.contains('pagos')) {
-          try {
-            const paymentStore = db.createObjectStore('pagos', { keyPath: 'id', autoIncrement: true });
-            paymentStore.createIndex('empresa_id', 'empresa_id', { unique: false });
-            paymentStore.createIndex('fecha_pago', 'fecha_pago', { unique: false });
-            paymentStore.createIndex('tipo', 'tipo', { unique: false });
-            console.log('✅ Tabla "pagos" creada');
-          } catch (e) {
-            console.log('✅ Tabla "pagos" ya existe');
-          }
-        }
-
-        if (!db.objectStoreNames.contains('configuracion')) {
-          try {
-            db.createObjectStore('configuracion', { keyPath: 'key' });
-            console.log('✅ Tabla "configuracion" creada');
-          } catch (e) {
-            console.log('✅ Tabla "configuracion" ya existe');
-          }
-        }
-        
-        console.log('✅ Estructura de IndexedDB verificada');
+        // VERIFICAR y CREAR tablas
+        this.createAllTables(db);
       };
     });
   }
 
-  async verifyTables() {
-    return new Promise((resolve, reject) => {
-      console.log('📊 Verificando tablas disponibles:', Array.from(this.db.objectStoreNames));
-      resolve();
-    });
+  createAllTables(db) {
+    // 1. Tabla usuarios
+    if (!db.objectStoreNames.contains('usuarios')) {
+      console.log('📝 Creando tabla: usuarios');
+      const userStore = db.createObjectStore('usuarios', { keyPath: 'id', autoIncrement: true });
+      userStore.createIndex('auth_id', 'auth_id', { unique: true });
+      userStore.createIndex('email', 'email', { unique: false });
+      userStore.createIndex('nombre_usuario', 'nombre_usuario', { unique: false });
+    }
+
+    // 2. Tabla empresas
+    if (!db.objectStoreNames.contains('empresas')) {
+      console.log('📝 Creando tabla: empresas');
+      const companyStore = db.createObjectStore('empresas', { keyPath: 'id', autoIncrement: true });
+      companyStore.createIndex('auth_id', 'auth_id', { unique: false });
+      companyStore.createIndex('nombre', 'nombre', { unique: false });
+      companyStore.createIndex('estado', 'estado', { unique: false });
+    }
+
+    // 3. Tabla contratos
+    if (!db.objectStoreNames.contains('contratos')) {
+      console.log('📝 Creando tabla: contratos');
+      const contractStore = db.createObjectStore('contratos', { keyPath: 'id', autoIncrement: true });
+      contractStore.createIndex('empresa_id', 'empresa_id', { unique: false });
+      contractStore.createIndex('numero_contrato', 'numero_contrato', { unique: false });
+      contractStore.createIndex('estado', 'estado', { unique: false });
+    }
+
+    // 4. Tabla certificaciones
+    if (!db.objectStoreNames.contains('certificaciones')) {
+      console.log('📝 Creando tabla: certificaciones');
+      const certificationStore = db.createObjectStore('certificaciones', { keyPath: 'id', autoIncrement: true });
+      certificationStore.createIndex('contrato_id', 'contrato_id', { unique: false });
+      certificationStore.createIndex('mes', 'mes', { unique: false });
+      certificationStore.createIndex('pagado', 'pagado', { unique: false });
+    }
+
+    // 5. Tabla pagos
+    if (!db.objectStoreNames.contains('pagos')) {
+      console.log('📝 Creando tabla: pagos');
+      const paymentStore = db.createObjectStore('pagos', { keyPath: 'id', autoIncrement: true });
+      paymentStore.createIndex('empresa_id', 'empresa_id', { unique: false });
+      paymentStore.createIndex('fecha_pago', 'fecha_pago', { unique: false });
+      paymentStore.createIndex('tipo', 'tipo', { unique: false });
+    }
+
+    // 6. Tabla configuracion
+    if (!db.objectStoreNames.contains('configuracion')) {
+      console.log('📝 Creando tabla: configuracion');
+      db.createObjectStore('configuracion', { keyPath: 'key' });
+    }
+    
+    console.log('✅ Todas las tablas creadas/verificadas');
   }
 
   async ensureInitialized() {
@@ -129,11 +109,8 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
-      // Verificar que la tabla existe
-      if (!this.db.objectStoreNames.contains(storeName)) {
-        console.error(`❌ La tabla ${storeName} no existe`);
-        return [];
-      }
+      // Debug: mostrar tablas disponibles
+      console.log('📊 Tablas disponibles al ejecutar getAll:', Array.from(this.db.objectStoreNames));
       
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction([storeName], 'readonly');
@@ -141,18 +118,17 @@ class LocalDatabase {
         const request = store.getAll();
 
         request.onsuccess = () => {
-          const result = request.result || [];
-          console.log(`📊 Obtenidos ${result.length} registros de ${storeName}`);
-          resolve(result);
+          console.log(`✅ getAll(${storeName}): ${request.result?.length || 0} registros`);
+          resolve(request.result || []);
         };
         
         request.onerror = (event) => {
-          console.error(`❌ Error obteniendo todos de ${storeName}:`, event.target.error);
-          resolve([]); // Devolver array vacío en lugar de rechazar
+          console.error(`❌ Error en getAll(${storeName}):`, event.target.error);
+          reject(event.target.error);
         };
       });
     } catch (error) {
-      console.error(`❌ Error en getAll(${storeName}):`, error);
+      console.error(`❌ Error crítico en getAll(${storeName}):`, error);
       return [];
     }
   }
@@ -161,21 +137,13 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
-      if (!this.db.objectStoreNames.contains(storeName)) {
-        console.error(`❌ La tabla ${storeName} no existe`);
-        return null;
-      }
-      
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction([storeName], 'readonly');
         const store = transaction.objectStore(storeName);
         const request = store.get(id);
 
         request.onsuccess = () => resolve(request.result);
-        request.onerror = (event) => {
-          console.error(`❌ Error obteniendo de ${storeName}:`, event.target.error);
-          resolve(null);
-        };
+        request.onerror = (event) => reject(event.target.error);
       });
     } catch (error) {
       console.error(`❌ Error en get(${storeName}, ${id}):`, error);
@@ -187,41 +155,37 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
-      if (!this.db.objectStoreNames.contains(storeName)) {
-        console.error(`❌ La tabla ${storeName} no existe`);
-        return null;
-      }
+      console.log(`➕ add(${storeName}):`, data);
       
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction([storeName], 'readwrite');
         const store = transaction.objectStore(storeName);
         
-        // Generar timestamp
-        const timestamp = new Date().toISOString();
+        // Añadir timestamps
         const enhancedData = {
           ...data,
-          created_at: timestamp,
-          updated_at: timestamp,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
           sync_status: 'pending'
         };
         
-        // No pasar ID si es autoincrement
+        // Eliminar id si existe (autoincrement)
         delete enhancedData.id;
         
         const request = store.add(enhancedData);
 
-        request.onsuccess = () => {
-          console.log(`✅ Datos agregados a ${storeName} con ID: ${request.result}`);
-          resolve(request.result);
+        request.onsuccess = (event) => {
+          console.log(`✅ add(${storeName}) exitoso. ID: ${event.target.result}`);
+          resolve(event.target.result);
         };
         
         request.onerror = (event) => {
-          console.error(`❌ Error agregando a ${storeName}:`, event.target.error, enhancedData);
+          console.error(`❌ Error en add(${storeName}):`, event.target.error);
           reject(event.target.error);
         };
       });
     } catch (error) {
-      console.error(`❌ Error en add(${storeName}):`, error, data);
+      console.error(`❌ Error crítico en add(${storeName}):`, error);
       return null;
     }
   }
@@ -230,52 +194,35 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
-      if (!this.db.objectStoreNames.contains(storeName)) {
-        console.error(`❌ La tabla ${storeName} no existe`);
-        return null;
-      }
-      
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction([storeName], 'readwrite');
         const store = transaction.objectStore(storeName);
         
-        // Primero obtener el registro existente
+        // Obtener primero
         const getRequest = store.get(id);
         
         getRequest.onsuccess = () => {
-          const existingData = getRequest.result;
-          if (!existingData) {
+          const existing = getRequest.result;
+          if (!existing) {
             reject(new Error('Registro no encontrado'));
             return;
           }
           
-          // Combinar con datos nuevos
           const updatedData = {
-            ...existingData,
+            ...existing,
             ...data,
-            id: id, // Asegurar que el ID se mantenga
+            id: id,
             updated_at: new Date().toISOString(),
             sync_status: 'pending'
           };
           
-          // Actualizar
           const putRequest = store.put(updatedData);
           
-          putRequest.onsuccess = () => {
-            console.log(`✅ Datos actualizados en ${storeName} con ID: ${id}`);
-            resolve(updatedData);
-          };
-          
-          putRequest.onerror = (event) => {
-            console.error(`❌ Error actualizando en ${storeName}:`, event.target.error);
-            reject(event.target.error);
-          };
+          putRequest.onsuccess = () => resolve(updatedData);
+          putRequest.onerror = (event) => reject(event.target.error);
         };
         
-        getRequest.onerror = (event) => {
-          console.error(`❌ Error obteniendo registro de ${storeName}:`, event.target.error);
-          reject(event.target.error);
-        };
+        getRequest.onerror = (event) => reject(event.target.error);
       });
     } catch (error) {
       console.error(`❌ Error en update(${storeName}, ${id}):`, error);
@@ -287,25 +234,13 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
-      if (!this.db.objectStoreNames.contains(storeName)) {
-        console.error(`❌ La tabla ${storeName} no existe`);
-        return false;
-      }
-      
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction([storeName], 'readwrite');
         const store = transaction.objectStore(storeName);
         const request = store.delete(id);
 
-        request.onsuccess = () => {
-          console.log(`✅ Registro eliminado de ${storeName}: ${id}`);
-          resolve(true);
-        };
-        
-        request.onerror = (event) => {
-          console.error(`❌ Error eliminando de ${storeName}:`, event.target.error);
-          reject(event.target.error);
-        };
+        request.onsuccess = () => resolve(true);
+        request.onerror = (event) => reject(event.target.error);
       });
     } catch (error) {
       console.error(`❌ Error en delete(${storeName}, ${id}):`, error);
@@ -313,67 +248,19 @@ class LocalDatabase {
     }
   }
 
-  async getContratosByEmpresa(empresaId) {
-    return this.getAllByIndex('contratos', 'empresa_id', empresaId);
-  }
-
-  async getCertificacionesByContrato(contratoId) {
-    return this.getAllByIndex('certificaciones', 'contrato_id', contratoId);
-  }
-
-  async getAllByIndex(storeName, indexName, key) {
-    try {
-      await this.ensureInitialized();
-      
-      if (!this.db.objectStoreNames.contains(storeName)) {
-        console.error(`❌ La tabla ${storeName} no existe`);
-        return [];
-      }
-      
-      return new Promise((resolve, reject) => {
-        const transaction = this.db.transaction([storeName], 'readonly');
-        const store = transaction.objectStore(storeName);
-        const index = store.index(indexName);
-        const request = index.getAll(key);
-
-        request.onsuccess = () => {
-          const result = request.result || [];
-          console.log(`📊 Obtenidos ${result.length} registros de ${storeName} por ${indexName}=${key}`);
-          resolve(result);
-        };
-        
-        request.onerror = (event) => {
-          console.error(`❌ Error obteniendo por índice de ${storeName}:`, event.target.error);
-          resolve([]);
-        };
-      });
-    } catch (error) {
-      console.error(`❌ Error en getAllByIndex(${storeName}, ${indexName}, ${key}):`, error);
-      return [];
-    }
-  }
-
-  // Métodos específicos para usuarios (para supabase.js)
+  // Métodos específicos para usuarios
   async getUserByAuthId(authId) {
     try {
       await this.ensureInitialized();
       
       return new Promise((resolve, reject) => {
-        if (!this.db.objectStoreNames.contains('usuarios')) {
-          resolve(null);
-          return;
-        }
-        
         const transaction = this.db.transaction(['usuarios'], 'readonly');
         const store = transaction.objectStore('usuarios');
         const index = store.index('auth_id');
         const request = index.get(authId);
 
         request.onsuccess = () => resolve(request.result);
-        request.onerror = (event) => {
-          console.error('❌ Error obteniendo usuario por auth_id:', event.target.error);
-          resolve(null);
-        };
+        request.onerror = (event) => reject(event.target.error);
       });
     } catch (error) {
       console.error('❌ Error en getUserByAuthId:', error);
@@ -385,28 +272,34 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
-      // Verificar si el usuario ya existe
-      const existingUser = await this.getUserByAuthId(userData.auth_id);
+      // Buscar si ya existe
+      const existing = await this.getUserByAuthId(userData.auth_id);
       
-      if (existingUser) {
-        // Actualizar usuario existente
-        return await this.update('usuarios', existingUser.id, userData);
+      if (existing) {
+        return await this.update('usuarios', existing.id, userData);
       } else {
-        // Crear nuevo usuario
         return await this.add('usuarios', userData);
       }
     } catch (error) {
-      console.error('❌ Error guardando usuario:', error);
+      console.error('❌ Error en saveUser:', error);
       return null;
     }
   }
 
-  // Método set para compatibilidad con supabase.js
+  // Métodos de compatibilidad
   async set(storeName, key, value) {
-    return this.setConfig(key, value);
+    if (storeName === 'configuracion') {
+      const existing = await this.get('configuracion', key);
+      if (existing) {
+        return await this.update('configuracion', key, { value: value });
+      } else {
+        return await this.add('configuracion', { key: key, value: value });
+      }
+    }
+    return null;
   }
 
-  // Métodos específicos para la aplicación
+  // Métodos específicos de la aplicación
   async getEmpresas() {
     return this.getAll('empresas');
   }
@@ -429,15 +322,33 @@ class LocalDatabase {
   }
 
   async setConfig(key, value) {
-    const existing = await this.get('configuracion', key);
-    
-    if (existing) {
-      await this.update('configuracion', key, { value: value });
-    } else {
-      await this.add('configuracion', {
-        key: key,
-        value: value
+    return this.set('configuracion', key, value);
+  }
+
+  async getContratosByEmpresa(empresaId) {
+    return this.getAllByIndex('contratos', 'empresa_id', empresaId);
+  }
+
+  async getCertificacionesByContrato(contratoId) {
+    return this.getAllByIndex('certificaciones', 'contrato_id', contratoId);
+  }
+
+  async getAllByIndex(storeName, indexName, key) {
+    try {
+      await this.ensureInitialized();
+      
+      return new Promise((resolve, reject) => {
+        const transaction = this.db.transaction([storeName], 'readonly');
+        const store = transaction.objectStore(storeName);
+        const index = store.index(indexName);
+        const request = index.getAll(key);
+
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = (event) => reject(event.target.error);
       });
+    } catch (error) {
+      console.error(`❌ Error en getAllByIndex(${storeName}, ${indexName}, ${key}):`, error);
+      return [];
     }
   }
 }
