@@ -3,7 +3,7 @@ class LocalDatabase {
   constructor() {
     this.db = null;
     this.dbName = 'CommissionManagerDB';
-    this.dbVersion = 3; // FORZAR VERSIÓN 3 para que se ejecute onupgradeneeded
+    this.dbVersion = 3; // Incrementar versión
     this.isInitialized = false;
   }
 
@@ -36,7 +36,7 @@ class LocalDatabase {
         
         const db = event.target.result;
         
-        // VERIFICAR y CREAR tablas
+        // Crear todas las tablas
         this.createAllTables(db);
       };
     });
@@ -109,8 +109,7 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
-      // Debug: mostrar tablas disponibles
-      console.log('📊 Tablas disponibles al ejecutar getAll:', Array.from(this.db.objectStoreNames));
+      console.log('📊 Ejecutando getAll para:', storeName);
       
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction([storeName], 'readonly');
@@ -118,8 +117,9 @@ class LocalDatabase {
         const request = store.getAll();
 
         request.onsuccess = () => {
-          console.log(`✅ getAll(${storeName}): ${request.result?.length || 0} registros`);
-          resolve(request.result || []);
+          const result = request.result || [];
+          console.log(`✅ getAll(${storeName}): ${result.length} registros`);
+          resolve(result);
         };
         
         request.onerror = (event) => {
@@ -133,20 +133,29 @@ class LocalDatabase {
     }
   }
 
-  async get(storeName, id) {
+  async get(storeName, key) {
     try {
       await this.ensureInitialized();
+      
+      console.log(`📊 Ejecutando get para: ${storeName}, key:`, key);
       
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction([storeName], 'readonly');
         const store = transaction.objectStore(storeName);
-        const request = store.get(id);
+        const request = store.get(key);
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = (event) => reject(event.target.error);
+        request.onsuccess = () => {
+          console.log(`✅ get(${storeName}, ${key}):`, request.result);
+          resolve(request.result);
+        };
+        
+        request.onerror = (event) => {
+          console.error(`❌ Error en get(${storeName}, ${key}):`, event.target.error);
+          reject(event.target.error);
+        };
       });
     } catch (error) {
-      console.error(`❌ Error en get(${storeName}, ${id}):`, error);
+      console.error(`❌ Error en get(${storeName}, ${key}):`, error);
       return null;
     }
   }
@@ -194,6 +203,8 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
+      console.log(`✏️ update(${storeName}, ${id}):`, data);
+      
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction([storeName], 'readwrite');
         const store = transaction.objectStore(storeName);
@@ -218,11 +229,21 @@ class LocalDatabase {
           
           const putRequest = store.put(updatedData);
           
-          putRequest.onsuccess = () => resolve(updatedData);
-          putRequest.onerror = (event) => reject(event.target.error);
+          putRequest.onsuccess = () => {
+            console.log(`✅ update(${storeName}, ${id}) exitoso`);
+            resolve(updatedData);
+          };
+          
+          putRequest.onerror = (event) => {
+            console.error(`❌ Error en update(${storeName}, ${id}):`, event.target.error);
+            reject(event.target.error);
+          };
         };
         
-        getRequest.onerror = (event) => reject(event.target.error);
+        getRequest.onerror = (event) => {
+          console.error(`❌ Error obteniendo registro en update(${storeName}, ${id}):`, event.target.error);
+          reject(event.target.error);
+        };
       });
     } catch (error) {
       console.error(`❌ Error en update(${storeName}, ${id}):`, error);
@@ -253,14 +274,23 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
+      console.log('👤 Buscando usuario con auth_id:', authId);
+      
       return new Promise((resolve, reject) => {
         const transaction = this.db.transaction(['usuarios'], 'readonly');
         const store = transaction.objectStore('usuarios');
         const index = store.index('auth_id');
         const request = index.get(authId);
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = (event) => reject(event.target.error);
+        request.onsuccess = () => {
+          console.log('✅ Usuario encontrado:', request.result);
+          resolve(request.result);
+        };
+        
+        request.onerror = (event) => {
+          console.error('❌ Error en getUserByAuthId:', event.target.error);
+          reject(event.target.error);
+        };
       });
     } catch (error) {
       console.error('❌ Error en getUserByAuthId:', error);
@@ -272,12 +302,16 @@ class LocalDatabase {
     try {
       await this.ensureInitialized();
       
+      console.log('💾 Guardando usuario:', userData);
+      
       // Buscar si ya existe
       const existing = await this.getUserByAuthId(userData.auth_id);
       
       if (existing) {
+        console.log('🔄 Actualizando usuario existente');
         return await this.update('usuarios', existing.id, userData);
       } else {
+        console.log('🆕 Creando nuevo usuario');
         return await this.add('usuarios', userData);
       }
     } catch (error) {
@@ -286,22 +320,100 @@ class LocalDatabase {
     }
   }
 
-  // Métodos de compatibilidad
+  // Métodos de configuración CORREGIDOS
+  async getConfig(key) {
+    try {
+      await this.ensureInitialized();
+      
+      console.log('⚙️ Obteniendo configuración:', key);
+      
+      return new Promise((resolve, reject) => {
+        const transaction = this.db.transaction(['configuracion'], 'readonly');
+        const store = transaction.objectStore('configuracion');
+        const request = store.get(key);
+
+        request.onsuccess = () => {
+          const result = request.result;
+          console.log(`✅ Configuración "${key}":`, result ? result.value : 'null');
+          resolve(result ? result.value : null);
+        };
+        
+        request.onerror = (event) => {
+          console.error(`❌ Error obteniendo configuración "${key}":`, event.target.error);
+          resolve(null); // Devolver null en lugar de rechazar
+        };
+      });
+    } catch (error) {
+      console.error(`❌ Error en getConfig("${key}"):`, error);
+      return null;
+    }
+  }
+
+  async setConfig(key, value) {
+    try {
+      await this.ensureInitialized();
+      
+      console.log(`⚙️ Guardando configuración: ${key} =`, value);
+      
+      return new Promise((resolve, reject) => {
+        const transaction = this.db.transaction(['configuracion'], 'readwrite');
+        const store = transaction.objectStore('configuracion');
+        
+        // Primero verificar si existe
+        const getRequest = store.get(key);
+        
+        getRequest.onsuccess = () => {
+          const existing = getRequest.result;
+          const configData = {
+            key: key,
+            value: value,
+            updated_at: new Date().toISOString()
+          };
+          
+          let request;
+          if (existing) {
+            // Actualizar existente
+            request = store.put(configData);
+          } else {
+            // Crear nuevo
+            request = store.add(configData);
+          }
+          
+          request.onsuccess = () => {
+            console.log(`✅ Configuración "${key}" guardada`);
+            resolve(true);
+          };
+          
+          request.onerror = (event) => {
+            console.error(`❌ Error guardando configuración "${key}":`, event.target.error);
+            reject(event.target.error);
+          };
+        };
+        
+        getRequest.onerror = (event) => {
+          console.error(`❌ Error verificando configuración "${key}":`, event.target.error);
+          reject(event.target.error);
+        };
+      });
+    } catch (error) {
+      console.error(`❌ Error en setConfig("${key}"):`, error);
+      return false;
+    }
+  }
+
+  // Método set para compatibilidad
   async set(storeName, key, value) {
     if (storeName === 'configuracion') {
-      const existing = await this.get('configuracion', key);
-      if (existing) {
-        return await this.update('configuracion', key, { value: value });
-      } else {
-        return await this.add('configuracion', { key: key, value: value });
-      }
+      return await this.setConfig(key, value);
     }
-    return null;
+    return false;
   }
 
   // Métodos específicos de la aplicación
   async getEmpresas() {
-    return this.getAll('empresas');
+    const empresas = await this.getAll('empresas');
+    console.log('🏢 Empresas obtenidas:', empresas.length);
+    return empresas;
   }
 
   async getContratos() {
@@ -314,15 +426,6 @@ class LocalDatabase {
 
   async getPagos() {
     return this.getAll('pagos');
-  }
-
-  async getConfig(key) {
-    const config = await this.get('configuracion', key);
-    return config ? config.value : null;
-  }
-
-  async setConfig(key, value) {
-    return this.set('configuracion', key, value);
   }
 
   async getContratosByEmpresa(empresaId) {
@@ -343,12 +446,39 @@ class LocalDatabase {
         const index = store.index(indexName);
         const request = index.getAll(key);
 
-        request.onsuccess = () => resolve(request.result || []);
+        request.onsuccess = () => {
+          const result = request.result || [];
+          console.log(`📊 Obtenidos ${result.length} registros de ${storeName} por ${indexName}=${key}`);
+          resolve(result);
+        };
+        
         request.onerror = (event) => reject(event.target.error);
       });
     } catch (error) {
       console.error(`❌ Error en getAllByIndex(${storeName}, ${indexName}, ${key}):`, error);
       return [];
+    }
+  }
+
+  // Método para limpiar todos los datos (solo para desarrollo)
+  async clearAllData() {
+    try {
+      await this.ensureInitialized();
+      
+      const storeNames = Array.from(this.db.objectStoreNames);
+      console.log('🧹 Limpiando datos de:', storeNames);
+      
+      for (const storeName of storeNames) {
+        const transaction = this.db.transaction([storeName], 'readwrite');
+        const store = transaction.objectStore(storeName);
+        await store.clear();
+        console.log(`✅ Datos limpiados de: ${storeName}`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Error limpiando datos:', error);
+      return false;
     }
   }
 }
@@ -358,5 +488,23 @@ const localDB = new LocalDatabase();
 
 // Hacer disponible globalmente
 window.localDB = localDB;
+
+// Método de ayuda para debugging
+window.debugLocalDB = async function() {
+  console.log('🔍 DEBUG LocalDB:');
+  console.log('isInitialized:', localDB.isInitialized);
+  if (localDB.db) {
+    console.log('Tablas:', Array.from(localDB.db.objectStoreNames));
+    
+    // Mostrar datos de cada tabla
+    const tables = ['usuarios', 'empresas', 'contratos', 'certificaciones', 'pagos', 'configuracion'];
+    for (const table of tables) {
+      if (localDB.db.objectStoreNames.contains(table)) {
+        const data = await localDB.getAll(table);
+        console.log(`📊 ${table}:`, data);
+      }
+    }
+  }
+};
 
 export { localDB };
