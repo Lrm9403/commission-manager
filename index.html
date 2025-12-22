@@ -362,7 +362,11 @@
                     delete: () => Promise.resolve(true),
                     getContratosByEmpresa: () => Promise.resolve([]),
                     getCertificacionesByContrato: () => Promise.resolve([]),
-                    getAllByIndex: () => Promise.resolve([])
+                    getAllByIndex: () => Promise.resolve([]),
+                    getEmpresas: () => Promise.resolve([]),
+                    getContratos: () => Promise.resolve([]),
+                    getCertificaciones: () => Promise.resolve([]),
+                    getPagos: () => Promise.resolve([])
                 };
             }
             
@@ -896,6 +900,37 @@
             async loadDashboardView() {
                 const content = document.getElementById('content-view');
                 
+                // Obtener datos reales
+                const empresas = await this.localDB.getAll('empresas');
+                const contratos = await this.localDB.getAll('contratos');
+                const certificaciones = await this.localDB.getAll('certificaciones');
+                const pagos = await this.localDB.getAll('pagos');
+                
+                // Calcular estadísticas
+                const totalEmpresas = empresas.length;
+                const totalContratos = contratos.length;
+                
+                // Calcular ingresos (suma de montos certificados * comisión)
+                let ingresos = 0;
+                let pendiente = 0;
+                
+                for (const cert of certificaciones) {
+                    const monto = cert.monto_certificado || 0;
+                    const porcentaje = cert.porcentaje_comision || 1;
+                    const comision = (monto * porcentaje) / 100;
+                    
+                    if (cert.pagado) {
+                        ingresos += comision;
+                    } else {
+                        pendiente += comision;
+                    }
+                }
+                
+                // Sumar pagos específicos
+                for (const pago of pagos) {
+                    ingresos += (pago.monto_total || 0);
+                }
+                
                 content.innerHTML = `
                     <div class="mb-8">
                         <h1 style="font-size: 1.75rem; font-weight: 700; color: #1e293b; margin-bottom: 8px;">Dashboard</h1>
@@ -909,9 +944,9 @@
                                 <div class="icon-wrapper icon-wrapper-primary">
                                     <div class="icon icon-company icon-md"></div>
                                 </div>
-                                <span style="font-size: 0.875rem; font-weight: 500; color: #22c55e;">+0%</span>
+                                <span style="font-size: 0.875rem; font-weight: 500; color: #22c55e;">${totalEmpresas > 0 ? '+100%' : '+0%'}</span>
                             </div>
-                            <h3 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">0</h3>
+                            <h3 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">${totalEmpresas}</h3>
                             <p style="font-size: 0.875rem; color: #64748b;">Empresas</p>
                         </div>
                         
@@ -920,9 +955,9 @@
                                 <div class="icon-wrapper">
                                     <div class="icon icon-contract icon-md"></div>
                                 </div>
-                                <span style="font-size: 0.875rem; font-weight: 500; color: #22c55e;">+0%</span>
+                                <span style="font-size: 0.875rem; font-weight: 500; color: #22c55e;">${totalContratos > 0 ? '+100%' : '+0%'}</span>
                             </div>
-                            <h3 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">0</h3>
+                            <h3 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">${totalContratos}</h3>
                             <p style="font-size: 0.875rem; color: #64748b;">Contratos</p>
                         </div>
                         
@@ -931,9 +966,9 @@
                                 <div class="icon-wrapper icon-wrapper-success">
                                     <div class="icon icon-payment icon-md"></div>
                                 </div>
-                                <span style="font-size: 0.875rem; font-weight: 500; color: #22c55e;">+0%</span>
+                                <span style="font-size: 0.875rem; font-weight: 500; color: #22c55e;">${ingresos > 0 ? '+100%' : '+0%'}</span>
                             </div>
-                            <h3 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">$0.00</h3>
+                            <h3 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">$${ingresos.toFixed(2)}</h3>
                             <p style="font-size: 0.875rem; color: #64748b;">Ingresos</p>
                         </div>
                         
@@ -942,9 +977,9 @@
                                 <div class="icon-wrapper icon-wrapper-warning">
                                     <div class="icon icon-certification icon-md"></div>
                                 </div>
-                                <span style="font-size: 0.875rem; font-weight: 500; color: #22c55e;">+0%</span>
+                                <span style="font-size: 0.875rem; font-weight: 500; color: #22c55e;">${pendiente > 0 ? '+100%' : '+0%'}</span>
                             </div>
-                            <h3 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">$0.00</h3>
+                            <h3 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">$${pendiente.toFixed(2)}</h3>
                             <p style="font-size: 0.875rem; color: #64748b;">Pendiente</p>
                         </div>
                     </div>
@@ -987,8 +1022,18 @@
                     <div>
                         <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">Actividad reciente</h2>
                         <div style="background: white; border-radius: 12px; padding: 24px;">
-                            <p style="text-align: center; color: #64748b; padding: 32px;">No hay actividad reciente</p>
+                            ${empresas.length === 0 && contratos.length === 0 && certificaciones.length === 0 ? 
+                            '<p style="text-align: center; color: #64748b; padding: 32px;">No hay actividad reciente. ¡Comienza agregando una empresa!</p>' : 
+                            this.getRecentActivityHTML(empresas, contratos, certificaciones, pagos)
+                            }
                         </div>
+                    </div>
+                    
+                    <!-- Debug -->
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button onclick="debugApp()" style="background: #666; color: white; padding: 8px 16px; border-radius: 6px; font-size: 0.8rem;">
+                            Debug
+                        </button>
                     </div>
                 `;
                 
@@ -999,6 +1044,51 @@
                         this.handleQuickAction(action);
                     });
                 });
+            }
+            
+            getRecentActivityHTML(empresas, contratos, certificaciones, pagos) {
+                let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
+                
+                // Mostrar últimas empresas (máximo 5)
+                const ultimasEmpresas = empresas.slice(-5).reverse();
+                ultimasEmpresas.forEach(empresa => {
+                    html += `
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid #f1f5f9;">
+                            <div class="icon-wrapper" style="background: #f0f9ff;">
+                                <div class="icon icon-company icon-md" style="color: #0ea5e9;"></div>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 500;">${empresa.nombre}</div>
+                                <div style="font-size: 0.875rem; color: #64748b;">Empresa creada</div>
+                            </div>
+                            <div style="font-size: 0.875rem; color: #64748b;">
+                                ${empresa.created_at ? new Date(empresa.created_at).toLocaleDateString() : 'Fecha no disponible'}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                // Mostrar últimos contratos
+                const ultimosContratos = contratos.slice(-3).reverse();
+                ultimosContratos.forEach(contrato => {
+                    html += `
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid #f1f5f9;">
+                            <div class="icon-wrapper">
+                                <div class="icon icon-contract icon-md"></div>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 500;">${contrato.nombre}</div>
+                                <div style="font-size: 0.875rem; color: #64748b;">Contrato ${contrato.estado}</div>
+                            </div>
+                            <div style="font-size: 0.875rem; color: #64748b;">
+                                ${contrato.created_at ? new Date(contrato.created_at).toLocaleDateString() : 'Fecha no disponible'}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                return html;
             }
             
             handleQuickAction(action) {
@@ -1943,8 +2033,8 @@
                  try {
                    const registration = await navigator.serviceWorker.register('./service-worker.js');
                    console.log('✅ Service Worker registrado con scope:', registration.scope); 
-				   
-				   // Verificar si hay actualizaciones
+                   
+                   // Verificar si hay actualizaciones
                    registration.addEventListener('updatefound', () => {
                      const newWorker = registration.installing;
                      console.log('🔄 Nuevo Service Worker encontrado:', newWorker);
@@ -1957,8 +2047,8 @@
                   console.log('❌ Service Worker no registrado:', error);
                 }
               });
-			  
-	    // Recargar cuando nuevo Service Worker esté listo
+              
+        // Recargar cuando nuevo Service Worker esté listo
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (!refreshing) {
